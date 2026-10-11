@@ -1,0 +1,29 @@
+# Betrieb auf einem Server im Internet (z. B. OVH VPS).
+# Caddy steht vor der App: holt automatisch ein HTTPS-Zertifikat und
+# verlangt ein Passwort, damit niemand Fremdes Standort und Akkustand sieht.
+# Gestartet wird alles von deploy/setup.sh bzw. deploy/update.sh.
+services:
+  app:
+    build: ..
+    env_file: ../.env
+    volumes:
+      - ford-data:/data
+    restart: unless-stopped
+    # Kein "ports": die App ist nur für Caddy erreichbar, nicht direkt aus dem Internet.
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    env_file: caddy.env
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  ford-data:
+  caddy-data:
