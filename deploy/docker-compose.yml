@@ -2,8 +2,12 @@
 # Caddy steht vor der App: holt automatisch ein HTTPS-Zertifikat und
 # verlangt ein Passwort, damit niemand Fremdes Standort und Akkustand sieht.
 # Gestartet wird alles von deploy/setup.sh bzw. deploy/update.sh.
+# Automatische Updates: GitHub Actions baut das Image, deploy/deploy.sh holt es.
 services:
   app:
+    # Fertiges Image aus GitHub Actions. "build" bleibt für setup.sh/update.sh,
+    # die das Image notfalls direkt auf dem Server bauen.
+    image: ghcr.io/noahtrr/ford-ev-api:latest
     build: ..
     env_file: ../.env
     volumes:

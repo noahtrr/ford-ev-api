@@ -75,6 +75,8 @@ LOGIN_USER=${login_user}
 LOGIN_HASH='${login_hash}'
 ENV
   umask 022
+  # Dem normalen Benutzer geben, damit der automatische Deploy (deploy/deploy.sh) sie lesen kann.
+  chown "${SUDO_USER:-root}": .env deploy/caddy.env
 fi
 
 echo "== 5/5 App bauen und starten (dauert beim ersten Mal ein paar Minuten)"

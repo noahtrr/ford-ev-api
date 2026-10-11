@@ -1,13 +1,26 @@
+# Läuft bei jedem Pull Request und bei jedem Push auf main:
+#   1. check  – TypeScript prüfen, Tests, Build
+#   2. docker – Docker-Image bauen, starten und prüfen, ob es antwortet.
+#               Nur auf main: Image zu GitHub (ghcr.io) hochladen.
+#   3. deploy – nur auf main: Server holt das neue Image und startet die App neu.
+# Einrichtung der Secrets für den Deploy: siehe deploy/AUTO-DEPLOY.md
 name: CI
 
 on:
   push:
     branches: [main]
   pull_request:
+  # Erlaubt einen Start per Knopfdruck unter "Actions" (z. B. für einen erneuten Deploy).
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
   check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,6 +34,109 @@ jobs:
 
   docker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t ford-ev-api .
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Image bauen
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ford-ev-api:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image testen (Container starten und /api/health abfragen)
+        run: |
+          docker run -d --name ford-test -p 8080:8080 \
+            -e FORD_CLIENT_ID=test -e FORD_CLIENT_SECRET=test \
+            ford-ev-api:test
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/api/health 2>/dev/null; then
+              echo
+              echo "Container antwortet."
+              # Die Weboberfläche muss auch mit im Image sein.
+              curl -fsS http://localhost:8080/ | grep -q '<div id="root">'
+              echo "Weboberfläche ist da."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Container antwortet nicht. Logs:"
+          docker logs ford-test
+          exit 1
+
+      - name: Bei GitHub Container Registry anmelden
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image hochladen (latest und Commit-Kennung)
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+
+  deploy:
+    needs: [check, docker]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    environment:
+      name: production
+      url: https://ford.zenvmc.de
+    # Nie zwei Deploys gleichzeitig; ein laufender wird nicht abgebrochen.
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    env:
+      DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+      DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+      DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      DEPLOY_HOST_KEY: ${{ secrets.DEPLOY_HOST_KEY }}
+    steps:
+      - name: Prüfen, ob die Deploy-Secrets eingerichtet sind
+        id: secrets
+        run: |
+          if [[ -z "$DEPLOY_HOST" || -z "$DEPLOY_USER" || -z "$DEPLOY_SSH_KEY" || -z "$DEPLOY_HOST_KEY" ]]; then
+            echo "::warning::Deploy übersprungen: Secrets fehlen noch (siehe deploy/AUTO-DEPLOY.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: SSH vorbereiten
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Nur genau diesem Server vertrauen (Schutz gegen gefälschte Server).
+          printf '%s %s\n' "$DEPLOY_HOST" "$DEPLOY_HOST_KEY" > ~/.ssh/known_hosts
+
+      - name: Neues Image auf dem Server starten
+        if: steps.secrets.outputs.ready == 'true'
+        # Der Server darf mit diesem Schlüssel nur deploy/deploy.sh ausführen.
+        # Über stdin bekommt er ein kurzlebiges Token, um das Image von ghcr.io zu laden.
+        run: |
+          printf '%s\n%s\n' "${{ github.actor }}" "${{ secrets.GITHUB_TOKEN }}" |
+            ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+              "$DEPLOY_USER@$DEPLOY_HOST" deploy
