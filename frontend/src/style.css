@@ -3,7 +3,7 @@
   color-scheme: light dark;
 }
 main {
-  max-width: 40rem;
+  max-width: 48rem;
   margin: 2rem auto;
   padding: 0 1rem;
 }
@@ -65,4 +65,90 @@ dd {
   padding: 0.05rem 0.5rem;
   border-radius: 1rem;
   border: 1px solid #8886;
+}
+.button.small {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+.vehicle-image {
+  margin: 0 0 0.75rem;
+  text-align: center;
+}
+.vehicle-image img {
+  max-width: 100%;
+  max-height: 14rem;
+  object-fit: contain;
+}
+.car-drawing {
+  width: min(100%, 18rem);
+  color: #1f4e9c;
+}
+.vehicle-image figcaption {
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+.card h2 {
+  margin-bottom: 0;
+}
+.vin {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid #8884;
+  border-left: 4px solid #8886;
+  border-radius: 0.6rem;
+  min-width: 0;
+}
+.tile.ok {
+  border-left-color: #2e8b57;
+}
+.tile.warn {
+  border-left-color: #d9822b;
+  background: #d9822b14;
+}
+.tile-title {
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+.tile-value {
+  font-size: 1.05rem;
+  overflow-wrap: anywhere;
+}
+.tile.missing .tile-value {
+  font-size: 0.85rem;
+  font-weight: 500;
+  opacity: 0.6;
+}
+.openings {
+  list-style: none;
+  padding: 0;
+  margin: 0.3rem 0 0;
+  width: 100%;
+  font-size: 0.8rem;
+}
+.openings li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.openings li span:first-child {
+  opacity: 0.75;
+}
+.openings li.open {
+  color: #d9822b;
+  font-weight: 600;
 }

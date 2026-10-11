@@ -46,4 +46,10 @@ describe("server", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe("null");
   });
+
+  it("liefert null, solange keine Fahrzeugdaten abgefragt wurden", async () => {
+    const res = await setup().inject("/api/vehicle-info");
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe("null");
+  });
 });

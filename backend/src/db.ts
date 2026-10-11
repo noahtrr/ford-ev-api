@@ -4,7 +4,8 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Tokens } from "./ford/auth.js";
-import { parseDepartureTimes, type VehicleSnapshot } from "./ford/telemetry.js";
+import { parseGarage, type VehicleInfo } from "./ford/garage.js";
+import { parseBodyStatus, parseDepartureTimes, type VehicleSnapshot } from "./ford/telemetry.js";
 
 export class Store {
   private db: DatabaseSync;
@@ -30,6 +31,11 @@ export class Store {
         charge_status TEXT,
         raw TEXT NOT NULL,
         UNIQUE (vin, ts)
+      );
+      CREATE TABLE IF NOT EXISTS garage (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        fetched_at TEXT NOT NULL,
+        raw TEXT NOT NULL
       );
       CREATE TABLE IF NOT EXISTS departure_times (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,20 +89,25 @@ export class Store {
          WHERE ts = (SELECT MAX(ts) FROM snapshots WHERE vin = s.vin)`,
       )
       .all() as Record<string, unknown>[];
-    return rows.map((r) => ({
-      vin: r.vin as string,
-      ts: r.ts as string,
-      socPct: r.soc_pct as number | null,
-      rangeKm: r.range_km as number | null,
-      odometerKm: r.odometer_km as number | null,
-      lat: r.lat as number | null,
-      lon: r.lon as number | null,
-      plugStatus: r.plug_status as string | null,
-      chargeStatus: r.charge_status as string | null,
-      // Abfahrtszeiten werden aus der gespeicherten Ford-Antwort gelesen, so gibt es sie
-      // auch für Messwerte, die vor dieser Funktion gespeichert wurden.
-      departures: parseDepartureTimes((JSON.parse(r.raw as string) as { metrics?: unknown }).metrics),
-    }));
+    return rows.map((r) => {
+      const metrics = (JSON.parse(r.raw as string) as { metrics?: unknown }).metrics;
+      return {
+        vin: r.vin as string,
+        ts: r.ts as string,
+        socPct: r.soc_pct as number | null,
+        rangeKm: r.range_km as number | null,
+        odometerKm: r.odometer_km as number | null,
+        lat: r.lat as number | null,
+        lon: r.lon as number | null,
+        plugStatus: r.plug_status as string | null,
+        chargeStatus: r.charge_status as string | null,
+        // Abfahrtszeiten werden aus der gespeicherten Ford-Antwort gelesen, so gibt es sie
+        // auch für Messwerte, die vor dieser Funktion gespeichert wurden.
+        departures: parseDepartureTimes(metrics),
+        // Türen, Fenster, 12-V-Batterie und Alarm genauso.
+        ...parseBodyStatus(metrics),
+      };
+    });
   }
 
   /**
@@ -119,5 +130,31 @@ export class Store {
       | { fetched_at: string; raw: string }
       | undefined;
     return row ? { fetchedAt: row.fetched_at, data: JSON.parse(row.raw) } : null;
+  }
+
+  /** Speichert die Antwort von /garage (Modell, Baujahr, ...). Es gibt immer nur die neueste. */
+  saveGarage(raw: unknown, now = new Date()): void {
+    this.db
+      .prepare(
+        `INSERT INTO garage (id, fetched_at, raw) VALUES (1, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET fetched_at = excluded.fetched_at, raw = excluded.raw`,
+      )
+      .run(now.toISOString(), JSON.stringify(raw));
+  }
+
+  /** Wann /garage zuletzt erfolgreich abgefragt wurde, oder null. */
+  garageFetchedAt(): string | null {
+    const row = this.db.prepare("SELECT fetched_at FROM garage WHERE id = 1").get() as
+      | { fetched_at: string }
+      | undefined;
+    return row?.fetched_at ?? null;
+  }
+
+  /** Modell, Baujahr und Bild-Link je Auto aus der gespeicherten /garage-Antwort. null = noch nie abgefragt. */
+  vehicleInfo(): { fetchedAt: string; vehicles: VehicleInfo[] } | null {
+    const row = this.db.prepare("SELECT fetched_at, raw FROM garage WHERE id = 1").get() as
+      | { fetched_at: string; raw: string }
+      | undefined;
+    return row ? { fetchedAt: row.fetched_at, vehicles: parseGarage(JSON.parse(row.raw)) } : null;
   }
 }

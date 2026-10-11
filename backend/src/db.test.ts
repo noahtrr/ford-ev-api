@@ -32,4 +32,15 @@ describe("Store", () => {
     expect(store.saveDepartureTimes(second, new Date("2026-10-11T10:30:00Z"))).toBe(true);
     expect(store.latestDepartureTimes()).toEqual({ fetchedAt: "2026-10-11T10:30:00.000Z", data: second });
   });
+
+  it("liest Modell und Bild aus der gespeicherten Garage-Antwort", () => {
+    const store = new Store(":memory:");
+    expect(store.vehicleInfo()).toBeNull();
+    expect(store.garageFetchedAt()).toBeNull();
+    store.saveGarage([{ vin: "V1", modelName: "Explorer", modelYear: "2025" }], new Date("2026-10-11T10:00:00Z"));
+    expect(store.vehicleInfo()).toEqual({
+      fetchedAt: "2026-10-11T10:00:00.000Z",
+      vehicles: [{ vin: "V1", model: "Explorer", year: 2025, imageUrl: null }],
+    });
+  });
 });
