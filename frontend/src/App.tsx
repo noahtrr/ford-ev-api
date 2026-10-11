@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { OdometerHistoryPage, YearOverviewPage } from "./Odometer";
 
 interface Departure {
   day: string;
@@ -255,7 +256,8 @@ function show(value: number | string | null, unit = ""): string {
   return value === null ? "–" : `${value}${unit}`;
 }
 
-export function App() {
+/** Startseite mit den Kacheln je Auto. */
+function OverviewPage() {
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [vehicleInfo, setVehicleInfo] = useState<VehicleInfoResponse>(null);
@@ -275,23 +277,23 @@ export function App() {
     return () => clearInterval(timer);
   }, []);
 
-  if (loggedIn === null) return <main>Lade…</main>;
+  if (loggedIn === null) return <p>Lade…</p>;
 
   if (!loggedIn) {
     return (
-      <main>
+      <>
         <h1>Mein Ford</h1>
         <p>Melde dich einmal mit deinem FordPass-Konto an.</p>
         <a className="button" href="/login">
           Mit Ford anmelden
         </a>
         <ApiDocs />
-      </main>
+      </>
     );
   }
 
   return (
-    <main>
+    <>
       <h1>Mein Ford</h1>
       {snapshots.length === 0 && <p>Noch keine Daten. Die erste Abfrage läuft gleich.</p>}
       {snapshots.map((s) => {
@@ -320,6 +322,66 @@ export function App() {
         );
       })}
       <ApiDocs />
-    </main>
+    </>
+  );
+}
+
+/** Die Seiten der App. Die Adresse steht hinter dem # (z. B. /#/kilometerstand), so braucht der Server nichts extra. */
+const PAGES = [
+  { path: "#/", label: "Übersicht", page: OverviewPage },
+  { path: "#/kilometerstand", label: "Kilometerstand", page: OdometerHistoryPage },
+  { path: "#/jahresuebersicht", label: "Jahresübersicht", page: YearOverviewPage },
+];
+
+function currentPath(): string {
+  return PAGES.some((p) => p.path === window.location.hash) ? window.location.hash : "#/";
+}
+
+/** Kopfzeile mit Hamburger-Menü. */
+function Header({ path }: { path: string }) {
+  const [open, setOpen] = useState(false);
+  // Nach einem Klick auf eine Seite das Menü wieder schließen.
+  useEffect(() => setOpen(false), [path]);
+  return (
+    <header className="topbar">
+      <button className="hamburger" aria-label="Menü" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span />
+        <span />
+        <span />
+      </button>
+      <span className="topbar-title">{PAGES.find((p) => p.path === path)?.label}</span>
+      {open && <div className="menu-backdrop" onClick={() => setOpen(false)} />}
+      <nav className={`menu${open ? " open" : ""}`} aria-hidden={!open}>
+        {PAGES.map((p) => (
+          <a key={p.path} href={p.path} className={p.path === path ? "active" : undefined} onClick={() => setOpen(false)}>
+            {p.label}
+          </a>
+        ))}
+        <a href="/api/docs" target="_blank" rel="noopener noreferrer">
+          API-Endpunkte (Swagger)
+        </a>
+      </nav>
+    </header>
+  );
+}
+
+export function App() {
+  const [path, setPath] = useState(currentPath);
+  useEffect(() => {
+    const onChange = () => {
+      setPath(currentPath());
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener("hashchange", onChange);
+    return () => window.removeEventListener("hashchange", onChange);
+  }, []);
+  const Page = PAGES.find((p) => p.path === path)!.page;
+  return (
+    <>
+      <Header path={path} />
+      <main>
+        <Page />
+      </main>
+    </>
   );
 }

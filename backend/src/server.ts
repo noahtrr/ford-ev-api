@@ -9,6 +9,7 @@ import type { Config } from "./config.js";
 import type { Store } from "./db.js";
 import { exchangeCode, loginUrl } from "./ford/auth.js";
 import type { FordClient } from "./ford/client.js";
+import { PERIODS, summarize, toCsv, toTxt, toXlsx, yearOverview, type Period } from "./odometer.js";
 import { pollOnce } from "./poller.js";
 
 export function buildServer(config: Config, store: Store, client: FordClient, publicDir?: string) {
@@ -29,6 +30,7 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
         { name: "App", description: "Zustand der App" },
         { name: "Anmeldung", description: "Login mit dem FordPass-Konto" },
         { name: "Fahrzeug", description: "Daten zu deinen Autos" },
+        { name: "Kilometerstand", description: "Verlauf des Kilometerstands und Jahresübersicht zum Exportieren" },
       ],
     },
   });
@@ -125,6 +127,94 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
         },
       },
       async () => store.latestDepartureTimes(),
+    );
+
+    // Ohne vin wird das erste Auto genommen, für das es Messwerte gibt.
+    const pickVin = (vin?: string) => vin || store.vins()[0] || null;
+    const vinProperty = { type: "string", description: "Fahrgestellnummer. Leer = erstes Auto." };
+
+    app.get<{ Querystring: { vin?: string; period?: Period } }>(
+      "/api/odometer",
+      {
+        schema: {
+          tags: ["Kilometerstand"],
+          summary: "Kilometerstand nach Tagen, Wochen, Monaten oder Jahren",
+          description:
+            "Je Zeitraum: Kilometerstand am Anfang und Ende und die gefahrenen Kilometer. Nur Zeiträume mit Messwerten, neueste zuerst.",
+          querystring: {
+            type: "object",
+            properties: { vin: vinProperty, period: { type: "string", enum: PERIODS, default: "day" } },
+          },
+        },
+      },
+      async (req) => {
+        const vin = pickVin(req.query.vin);
+        const period = req.query.period ?? "day";
+        return { vin, vins: store.vins(), period, rows: vin ? summarize(store.odometerReadings(vin), period, config.timeZone) : [] };
+      },
+    );
+
+    const yearQuery = {
+      type: "object",
+      properties: { vin: vinProperty, year: { type: "integer", minimum: 2000, maximum: 2100, description: "Leer = aktuelles Jahr" } },
+    };
+
+    /** Jahre, für die es Kilometerstände gibt, plus das aktuelle Jahr. Neueste zuerst. */
+    const yearsWithData = (vin: string | null) => {
+      const years = new Set([new Date().getFullYear()]);
+      if (vin) for (const r of summarize(store.odometerReadings(vin), "year", config.timeZone)) years.add(Number(r.period));
+      return [...years].sort((a, b) => b - a);
+    };
+
+    app.get<{ Querystring: { vin?: string; year?: number } }>(
+      "/api/odometer/year",
+      {
+        schema: {
+          tags: ["Kilometerstand"],
+          summary: "Jahresübersicht mit allen 12 Monaten",
+          description:
+            "Kilometerstand am Monatsanfang und -ende und gefahrene km je Monat. Ohne Messwert im Monat wird der letzte bekannte Stand übernommen.",
+          querystring: yearQuery,
+        },
+      },
+      async (req, reply) => {
+        const vin = pickVin(req.query.vin);
+        if (!vin) return reply.code(404).send({ error: "Noch keine Kilometerstände gespeichert." });
+        const year = req.query.year ?? new Date().getFullYear();
+        return { ...yearOverview(vin, store.odometerReadings(vin), year, config.timeZone), years: yearsWithData(vin), vins: store.vins() };
+      },
+    );
+
+    const exportFormats = {
+      csv: { type: "text/csv; charset=utf-8", build: toCsv },
+      txt: { type: "text/plain; charset=utf-8", build: toTxt },
+      xlsx: { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", build: toXlsx },
+    } as const;
+
+    app.get<{ Querystring: { vin?: string; year?: number; format: keyof typeof exportFormats } }>(
+      "/api/odometer/year/export",
+      {
+        schema: {
+          tags: ["Kilometerstand"],
+          summary: "Jahresübersicht als Datei herunterladen",
+          description: "CSV (für Excel mit Semikolon), TXT (Texttabelle) oder XLSX (Excel).",
+          querystring: {
+            ...yearQuery,
+            properties: { ...yearQuery.properties, format: { type: "string", enum: Object.keys(exportFormats), default: "csv" } },
+          },
+        },
+      },
+      async (req, reply) => {
+        const vin = pickVin(req.query.vin);
+        if (!vin) return reply.code(404).send({ error: "Noch keine Kilometerstände gespeichert." });
+        const year = req.query.year ?? new Date().getFullYear();
+        const format = exportFormats[req.query.format ?? "csv"];
+        const overview = yearOverview(vin, store.odometerReadings(vin), year, config.timeZone);
+        return reply
+          .type(format.type)
+          .header("content-disposition", `attachment; filename="kilometerstand-${year}.${req.query.format ?? "csv"}"`)
+          .send(format.build(overview, config.timeZone));
+      },
     );
   });
 

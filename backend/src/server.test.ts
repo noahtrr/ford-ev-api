@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Config } from "./config.js";
 import { Store } from "./db.js";
 import { FordClient } from "./ford/client.js";
+import { parseTelemetry } from "./ford/telemetry.js";
 import { buildServer } from "./server.js";
 
 const config: Config = {
@@ -9,6 +10,7 @@ const config: Config = {
   dataDir: ":memory:",
   pollIntervalMinutes: 5,
   frontendUrl: "/",
+  timeZone: "Europe/Berlin",
   ford: {
     clientId: "id",
     clientSecret: "secret",
@@ -19,9 +21,15 @@ const config: Config = {
   },
 };
 
-function setup() {
+function setup(fill?: (store: Store) => void) {
   const store = new Store(":memory:");
+  fill?.(store);
   return buildServer(config, store, new FordClient(config.ford, store));
+}
+
+/** Speichert einen Kilometerstand für Auto V1. */
+function odometer(store: Store, ts: string, km: number) {
+  store.saveSnapshot(parseTelemetry({ vin: "V1", metrics: { odometer: { value: km, updateTime: ts } } })[0]);
 }
 
 describe("server", () => {
@@ -67,5 +75,37 @@ describe("server", () => {
     const res = await setup().inject("/api/docs/");
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toMatch(/html/);
+  });
+
+  it("liefert den Kilometerstand nach Monaten und die Jahresübersicht", async () => {
+    const app = setup((store) => {
+      odometer(store, "2026-01-10T10:00:00Z", 1000);
+      odometer(store, "2026-02-10T10:00:00Z", 1500);
+    });
+    const months = await app.inject("/api/odometer?period=month");
+    expect(months.json()).toMatchObject({ vin: "V1", period: "month", rows: [{ period: "2026-02", distanceKm: 500 }, { period: "2026-01" }] });
+
+    const year = await app.inject("/api/odometer/year?year=2026");
+    expect(year.json()).toMatchObject({ vin: "V1", year: 2026, totalKm: 500, years: expect.arrayContaining([2026]) });
+    expect(year.json().months).toHaveLength(12);
+  });
+
+  it("lädt die Jahresübersicht als CSV, TXT und Excel herunter", async () => {
+    const app = setup((store) => odometer(store, "2026-01-10T10:00:00Z", 1000));
+    const csv = await app.inject("/api/odometer/year/export?year=2026&format=csv");
+    expect(csv.headers["content-type"]).toMatch(/text\/csv/);
+    expect(csv.headers["content-disposition"]).toBe('attachment; filename="kilometerstand-2026.csv"');
+    expect(csv.body).toContain("Januar 2026;1000;1000;0;1;");
+    const txt = await app.inject("/api/odometer/year/export?year=2026&format=txt");
+    expect(txt.body).toContain("Kilometerstand 2026");
+    const xlsx = await app.inject("/api/odometer/year/export?year=2026&format=xlsx");
+    expect(xlsx.rawPayload.subarray(0, 2).toString()).toBe("PK");
+    const bad = await app.inject("/api/odometer/year/export?format=pdf");
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it("meldet 404 für die Jahresübersicht, solange es keine Kilometerstände gibt", async () => {
+    const res = await setup().inject("/api/odometer/year");
+    expect(res.statusCode).toBe(404);
   });
 });

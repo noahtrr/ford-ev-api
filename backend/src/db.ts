@@ -5,6 +5,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Tokens } from "./ford/auth.js";
 import { parseGarage, type VehicleInfo } from "./ford/garage.js";
+import type { OdometerReading } from "./odometer.js";
 import { parseBodyStatus, parseDepartureTimes, type VehicleSnapshot } from "./ford/telemetry.js";
 
 export class Store {
@@ -108,6 +109,18 @@ export class Store {
         ...parseBodyStatus(metrics),
       };
     });
+  }
+
+  /** Alle gespeicherten Kilometerstände eines Autos, älteste zuerst. */
+  odometerReadings(vin: string): OdometerReading[] {
+    return this.db
+      .prepare("SELECT ts, odometer_km AS km FROM snapshots WHERE vin = ? AND odometer_km IS NOT NULL ORDER BY ts")
+      .all(vin) as unknown as OdometerReading[];
+  }
+
+  /** Die Fahrgestellnummern aller Autos, für die es Messwerte gibt. */
+  vins(): string[] {
+    return (this.db.prepare("SELECT DISTINCT vin FROM snapshots ORDER BY vin").all() as { vin: string }[]).map((r) => r.vin);
   }
 
   /**
