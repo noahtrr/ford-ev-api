@@ -11,6 +11,8 @@ const config: Config = {
   pollIntervalMinutes: 5,
   frontendUrl: "/",
   timeZone: "Europe/Berlin",
+  // Ohne Login, wie beim Entwickeln am eigenen Rechner. Der Login wird in auth/routes.test.ts getestet.
+  auth: { username: null, passwordHash: null, domain: null, lockWithoutLogin: false },
   ford: {
     clientId: "id",
     clientSecret: "secret",

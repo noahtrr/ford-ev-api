@@ -25,6 +25,7 @@ Wichtige Dateien im Backend:
 - `src/odometer.ts` – Kilometerstand nach Tagen/Wochen/Monaten/Jahren, Jahresübersicht und Export
 - `src/xlsx.ts` – schreibt Excel-Dateien ohne zusätzliches Paket
 - `src/server.ts` – Webadressen (`/login`, `/api/...`)
+- `src/auth/` – Login in die App mit Passwort oder Passkey, Profileinstellungen
 
 ## Einrichtung im Ford-Portal
 
@@ -35,11 +36,11 @@ Wichtige Dateien im Backend:
 ## Starten mit Docker
 
 ```bash
-cp .env.example .env   # dann Client ID und Secret in .env eintragen
+cp .env.example .env   # dann Client ID und Secret sowie LOGIN_USER und LOGIN_HASH in .env eintragen
 docker compose up -d --build
 ```
 
-Danach <http://localhost:8080> öffnen und auf „Mit Ford anmelden“ klicken.
+Danach <http://localhost:8080> öffnen, anmelden und auf „Mit Ford verbinden“ klicken.
 
 Die Datenbank liegt im Docker-Volume `ford-data` und bleibt bei Neustarts erhalten.
 
@@ -47,7 +48,7 @@ Die Datenbank liegt im Docker-Volume `ford-data` und bleibt bei Neustarts erhalt
 
 ## Betrieb auf einem Server (z. B. OVH VPS)
 
-Im Ordner `deploy/` liegt alles für einen Server im Internet. Davor sitzt [Caddy](https://caddyserver.com): holt automatisch ein HTTPS-Zertifikat und fragt nach Benutzername und Passwort, damit niemand Fremdes Standort und Akkustand deines Autos sieht.
+Im Ordner `deploy/` liegt alles für einen Server im Internet. Davor sitzt [Caddy](https://caddyserver.com) und holt automatisch ein HTTPS-Zertifikat. Die App selbst fragt nach Benutzername und Passwort (oder einem Passkey), damit niemand Fremdes Standort und Akkustand deines Autos sieht.
 
 1. **Server bestellen:** im OVH-Kundencenter einen VPS (VPS-1 reicht) mit **Ubuntu 24.04** bestellen. Ein Standort in Europa ist am schnellsten. Den Zugang (IP, Benutzer `ubuntu`, Passwort) schickt OVH per E-Mail.
 2. **Einloggen:** im Terminal (Windows: PowerShell) `ssh ubuntu@DEINE-IP`, beim ersten Mal das Passwort aus der E-Mail und danach ein neues vergeben.
@@ -65,9 +66,13 @@ Im Ordner `deploy/` liegt alles für einen Server im Internet. Davor sitzt [Cadd
    ```
    Das Skript installiert Docker, schaltet die Firewall ein (nur SSH, HTTP, HTTPS) und fragt nach Ford Client ID und Secret sowie einem Passwort für die Weboberfläche. Ohne eigene Domain nimmst du einfach die vorgeschlagene Adresse `DEINE-IP.sslip.io`.
 5. **Ford-Portal:** die Redirect URI, die das Skript am Ende anzeigt (`https://…/callback`), bei deiner Ford-App eintragen.
-6. Adresse im Browser öffnen, mit Benutzername/Passwort anmelden, dann „Mit Ford anmelden“.
+6. Adresse im Browser öffnen, mit Benutzername/Passwort anmelden, dann „Mit Ford verbinden“.
+7. Optional: im Menü unter **Profil** einen Passkey hinzufügen. Danach meldest du dich per Fingerabdruck, Gesicht oder Geräte-PIN an.
 
 **Automatisch aktualisieren:** Nach einer einmaligen Einrichtung ([deploy/AUTO-DEPLOY.md](deploy/AUTO-DEPLOY.md)) baut und testet GitHub Actions bei jedem Push auf `main` das Docker-Image und spielt es selbst auf dem Server ein.
+
+**Login und Passkeys:** Benutzername und Passwort aus `deploy/setup.sh` stehen in `deploy/caddy.env` (`LOGIN_USER`, `LOGIN_HASH`). Im Profil kannst du das Passwort ändern, Passkeys hinzufügen und andere Geräte abmelden. Das Passwort bleibt immer gültig, auch mit Passkey. Passwort aus dem Profil vergessen? Dann gilt nach diesem Befehl wieder das aus der Einrichtung:
+`sudo docker compose -f deploy/docker-compose.yml exec app node backend/dist/reset-password.js`
 
 Neuen Stand von Hand einspielen: `cd ~/ford-ev-api && sudo bash deploy/update.sh`
 Logs ansehen: `sudo docker compose -f deploy/docker-compose.yml logs -f`

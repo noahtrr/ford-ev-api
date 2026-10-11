@@ -1,5 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { LOGGED_OUT, LoginPage, ProfilePage, type Me } from "./Account";
 import { OdometerHistoryPage, YearOverviewPage } from "./Odometer";
+
+// Antwortet das Backend mit 401, ist die Anmeldung abgelaufen: dann zur Anmeldeseite.
+const originalFetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const res = await originalFetch(...args);
+  if (res.status === 401) window.dispatchEvent(new Event(LOGGED_OUT));
+  return res;
+};
 
 interface Departure {
   day: string;
@@ -266,9 +275,9 @@ function OverviewPage() {
     return (
       <>
         <h1>Mein Ford</h1>
-        <p>Melde dich einmal mit deinem FordPass-Konto an.</p>
+        <p>Verbinde die App einmal mit deinem FordPass-Konto.</p>
         <a className="button" href="/login">
-          Mit Ford anmelden
+          Mit Ford verbinden
         </a>
       </>
     );
@@ -312,6 +321,7 @@ const PAGES = [
   { path: "#/", label: "Übersicht", page: OverviewPage },
   { path: "#/kilometerstand", label: "Kilometerstand", page: OdometerHistoryPage },
   { path: "#/jahresuebersicht", label: "Jahresübersicht", page: YearOverviewPage },
+  { path: "#/profil", label: "Profil", page: ProfilePage },
 ];
 
 function currentPath(): string {
@@ -347,6 +357,21 @@ function Header({ path }: { path: string }) {
 }
 
 export function App() {
+  const [me, setMe] = useState<Me | null>(null);
+  const loadMe = () => void originalFetch("/api/auth/me").then(async (r) => setMe(await r.json()));
+  useEffect(() => {
+    loadMe();
+    const onLoggedOut = () => setMe((m) => (m && m.loginRequired ? { ...m, loggedIn: false } : m));
+    window.addEventListener(LOGGED_OUT, onLoggedOut);
+    return () => window.removeEventListener(LOGGED_OUT, onLoggedOut);
+  }, []);
+
+  if (me === null) return <main>Lade…</main>;
+  if (me.loginRequired && !me.loggedIn) return <LoginPage setupMissing={me.setupMissing} onLoggedIn={loadMe} />;
+  return <LoggedInApp />;
+}
+
+function LoggedInApp() {
   const [path, setPath] = useState(currentPath);
   useEffect(() => {
     const onChange = () => {

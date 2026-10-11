@@ -1,7 +1,6 @@
 # Die Werte kommen aus deploy/caddy.env (legt setup.sh an).
+# Caddy holt das HTTPS-Zertifikat und leitet alles an die App weiter.
+# Die Anmeldung (Passwort oder Passkey) macht die App selbst, mit LOGIN_USER und LOGIN_HASH aus caddy.env.
 {$DOMAIN} {
-	basic_auth {
-		{$LOGIN_USER} {$LOGIN_HASH}
-	}
 	reverse_proxy app:8080
 }

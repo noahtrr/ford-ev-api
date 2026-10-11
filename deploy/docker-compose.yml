@@ -1,6 +1,7 @@
 # Betrieb auf einem Server im Internet (z. B. OVH VPS).
-# Caddy steht vor der App: holt automatisch ein HTTPS-Zertifikat und
-# verlangt ein Passwort, damit niemand Fremdes Standort und Akkustand sieht.
+# Caddy steht vor der App und holt automatisch ein HTTPS-Zertifikat.
+# Die App selbst verlangt eine Anmeldung (Passwort oder Passkey), damit niemand
+# Fremdes Standort und Akkustand sieht.
 # Gestartet wird alles von deploy/setup.sh bzw. deploy/update.sh.
 # Automatische Updates: GitHub Actions baut das Image, deploy/deploy.sh holt es.
 services:
@@ -9,7 +10,10 @@ services:
     # die das Image notfalls direkt auf dem Server bauen.
     image: ghcr.io/noahtrr/ford-ev-api:latest
     build: ..
-    env_file: ../.env
+    # caddy.env liefert LOGIN_USER und LOGIN_HASH für den Login und DOMAIN für Passkeys.
+    env_file:
+      - ../.env
+      - caddy.env
     volumes:
       - ford-data:/data
     restart: unless-stopped
@@ -21,6 +25,11 @@ services:
       - "80:80"
       - "443:443"
     env_file: caddy.env
+    labels:
+      # Nach jeder Änderung am Caddyfile hochzählen: dann startet der nächste Deploy
+      # Caddy neu und es liest das Caddyfile neu ein (sonst läuft die alte Version weiter).
+      # 2: Login nicht mehr in Caddy, sondern in der App.
+      ford.caddyfile-version: "2"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

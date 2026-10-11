@@ -1,11 +1,13 @@
 // Der Webserver: Login-Routen, eine kleine REST-API und die Weboberfläche.
 import Fastify from "fastify";
+import fastifyCookie from "@fastify/cookie";
 import fastifyStatic from "@fastify/static";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import type { Config } from "./config.js";
+import { setupAuth } from "./auth/routes.js";
 import type { Store } from "./db.js";
 import { exchangeCode, loginUrl } from "./ford/auth.js";
 import type { FordClient } from "./ford/client.js";
@@ -13,7 +15,8 @@ import { PERIODS, summarize, toCsv, toTxt, toXlsx, yearOverview, type Period } f
 import { pollOnce } from "./poller.js";
 
 export function buildServer(config: Config, store: Store, client: FordClient, publicDir?: string) {
-  const app = Fastify({ logger: true });
+  // trustProxy: die App steht hinter Caddy, das die echte IP und "https" in X-Forwarded-* mitschickt.
+  const app = Fastify({ logger: true, trustProxy: true });
   // Schützt den Login vor fremden Rückleitungen (CSRF).
   const pendingStates = new Set<string>();
 
@@ -28,7 +31,8 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
       },
       tags: [
         { name: "App", description: "Zustand der App" },
-        { name: "Anmeldung", description: "Login mit dem FordPass-Konto" },
+        { name: "Konto", description: "Login in diese App (Passwort oder Passkey) und Profileinstellungen" },
+        { name: "Anmeldung", description: "Verbindung mit dem FordPass-Konto" },
         { name: "Fahrzeug", description: "Daten zu deinen Autos" },
         { name: "Kilometerstand", description: "Verlauf des Kilometerstands und Jahresübersicht zum Exportieren" },
       ],
@@ -36,8 +40,14 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
   });
   app.register(fastifySwaggerUi, { routePrefix: "/api/docs" });
 
+  // Login: ab hier braucht jede Adresse außer der Weboberfläche selbst eine Anmeldung.
+  app.register(fastifyCookie);
+  const authRoutes = setupAuth(app, config, store);
+
   // Die Routen erst nach Swagger anmelden, damit Swagger sie alle sieht.
   app.register(async (app) => {
+    authRoutes(app);
+
     app.get("/api/health", { schema: { tags: ["App"], summary: "Prüft, ob die App läuft" } }, async () => ({ ok: true }));
 
     app.get(
@@ -48,7 +58,7 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
 
     const loginSchema = {
       tags: ["Anmeldung"],
-      summary: "Startet den Login bei Ford",
+      summary: "Verbindet die App mit deinem FordPass-Konto",
       description: "Leitet zur Ford-Anmeldeseite weiter. Im Browser öffnen, nicht hier ausprobieren.",
     };
     app.get("/login", { schema: loginSchema }, async (_req, reply) => {
