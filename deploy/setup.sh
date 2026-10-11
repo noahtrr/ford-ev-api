@@ -90,7 +90,7 @@ Fertig! Die App läuft unter:  https://${domain}
 Noch zu tun im Ford-Entwicklerportal: als Redirect URI eintragen
   https://${domain}/callback
 Danach die Adresse öffnen, mit Benutzername/Passwort anmelden und
-auf „Mit Ford anmelden“ klicken.
+auf „Mit Ford verbinden“ klicken. Unter Profil kannst du einen Passkey hinzufügen.
 
 Später aktualisieren:  cd ${REPO_DIR} && sudo bash deploy/update.sh
 Logs ansehen:          cd ${REPO_DIR} && sudo docker compose -f deploy/docker-compose.yml logs -f

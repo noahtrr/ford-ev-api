@@ -1,12 +1,40 @@
 // Speichert Login-Tokens und Messwerte in einer SQLite-Datei.
 // node:sqlite ist in Node.js eingebaut, es braucht also kein extra Paket.
 import { DatabaseSync } from "node:sqlite";
+import { randomBytes } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Tokens } from "./ford/auth.js";
 import { parseGarage, type VehicleInfo } from "./ford/garage.js";
 import type { OdometerReading } from "./odometer.js";
 import { parseBodyStatus, parseDepartureTimes, type VehicleSnapshot } from "./ford/telemetry.js";
+
+export interface Account {
+  webauthnUserId: string;
+  displayName: string | null;
+  passwordHash: string | null;
+  passwordChangedAt: string | null;
+}
+
+export interface Passkey {
+  /** Kennung des Passkeys (base64url), so wie der Browser sie schickt. */
+  id: string;
+  publicKey: Uint8Array<ArrayBuffer>;
+  counter: number;
+  transports: string[];
+  name: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
+export interface Session {
+  id: string;
+  method: string;
+  userAgent: string | null;
+  createdAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+}
 
 export class Store {
   private db: DatabaseSync;
@@ -42,6 +70,33 @@ export class Store {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         fetched_at TEXT NOT NULL,
         raw TEXT NOT NULL
+      );
+      -- Das eine Konto für die Weboberfläche. Benutzername kommt aus LOGIN_USER.
+      CREATE TABLE IF NOT EXISTS account (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        webauthn_user_id TEXT NOT NULL,
+        display_name TEXT,
+        password_hash TEXT,
+        password_changed_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS passkeys (
+        id TEXT PRIMARY KEY,
+        public_key TEXT NOT NULL,
+        counter INTEGER NOT NULL,
+        transports TEXT,
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_used_at TEXT
+      );
+      -- Angemeldete Browser. Gespeichert wird nur ein Hash des Cookies.
+      CREATE TABLE IF NOT EXISTS sessions (
+        id TEXT PRIMARY KEY,
+        token_hash TEXT NOT NULL UNIQUE,
+        method TEXT NOT NULL,
+        user_agent TEXT,
+        created_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
       );
     `);
   }
@@ -170,4 +225,123 @@ export class Store {
       | undefined;
     return row ? { fetchedAt: row.fetched_at, vehicles: parseGarage(JSON.parse(row.raw)) } : null;
   }
+
+  // ---- Konto, Passkeys und Sitzungen für den Login (src/auth/) ----
+
+  /** Das Konto. Wird beim ersten Aufruf angelegt. */
+  account(): Account {
+    const read = () =>
+      this.db.prepare("SELECT webauthn_user_id, display_name, password_hash, password_changed_at FROM account WHERE id = 1").get() as
+        | Record<string, string | null>
+        | undefined;
+    let row = read();
+    if (!row) {
+      // Zufällige Kennung, mit der Passkeys das Konto wiedererkennen (enthält nichts Persönliches).
+      this.db.prepare("INSERT INTO account (id, webauthn_user_id) VALUES (1, ?)").run(randomBytes(32).toString("base64url"));
+      row = read()!;
+    }
+    return {
+      webauthnUserId: row.webauthn_user_id!,
+      displayName: row.display_name,
+      passwordHash: row.password_hash,
+      passwordChangedAt: row.password_changed_at,
+    };
+  }
+
+  setDisplayName(name: string | null): void {
+    this.account();
+    this.db.prepare("UPDATE account SET display_name = ? WHERE id = 1").run(name);
+  }
+
+  /** Speichert ein in der App geändertes Passwort. null = wieder das Passwort aus der Server-Einrichtung. */
+  setPasswordHash(hash: string | null, now = new Date()): void {
+    this.account();
+    this.db
+      .prepare("UPDATE account SET password_hash = ?, password_changed_at = ? WHERE id = 1")
+      .run(hash, hash ? now.toISOString() : null);
+  }
+
+  passkeys(): Passkey[] {
+    const rows = this.db.prepare("SELECT * FROM passkeys ORDER BY created_at").all() as Record<string, string | number | null>[];
+    return rows.map((r) => ({
+      id: r.id as string,
+      publicKey: new Uint8Array(Buffer.from(r.public_key as string, "base64url")),
+      counter: r.counter as number,
+      transports: r.transports ? (JSON.parse(r.transports as string) as string[]) : [],
+      name: r.name as string,
+      createdAt: r.created_at as string,
+      lastUsedAt: r.last_used_at as string | null,
+    }));
+  }
+
+  passkey(id: string): Passkey | undefined {
+    return this.passkeys().find((p) => p.id === id);
+  }
+
+  addPasskey(p: Omit<Passkey, "createdAt" | "lastUsedAt">, now = new Date()): void {
+    this.db
+      .prepare("INSERT INTO passkeys (id, public_key, counter, transports, name, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(p.id, Buffer.from(p.publicKey).toString("base64url"), p.counter, JSON.stringify(p.transports), p.name, now.toISOString());
+  }
+
+  /** Nach einem Login mit Passkey: Zähler und „zuletzt benutzt“ aktualisieren. */
+  passkeyUsed(id: string, counter: number, now = new Date()): void {
+    this.db.prepare("UPDATE passkeys SET counter = ?, last_used_at = ? WHERE id = ?").run(counter, now.toISOString(), id);
+  }
+
+  renamePasskey(id: string, name: string): boolean {
+    return this.db.prepare("UPDATE passkeys SET name = ? WHERE id = ?").run(name, id).changes > 0;
+  }
+
+  deletePasskey(id: string): boolean {
+    return this.db.prepare("DELETE FROM passkeys WHERE id = ?").run(id).changes > 0;
+  }
+
+  createSession(s: Session & { tokenHash: string }): void {
+    this.db
+      .prepare(
+        "INSERT INTO sessions (id, token_hash, method, user_agent, created_at, last_seen_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      )
+      .run(s.id, s.tokenHash, s.method, s.userAgent, s.createdAt, s.lastSeenAt, s.expiresAt);
+  }
+
+  /** Die gültige Sitzung zu einem Cookie-Hash, oder undefined. */
+  sessionByTokenHash(tokenHash: string, now = new Date()): Session | undefined {
+    const row = this.db
+      .prepare("SELECT id, method, user_agent, created_at, last_seen_at, expires_at FROM sessions WHERE token_hash = ? AND expires_at > ?")
+      .get(tokenHash, now.toISOString()) as Record<string, string | null> | undefined;
+    return row ? toSession(row) : undefined;
+  }
+
+  touchSession(id: string, now = new Date()): void {
+    this.db.prepare("UPDATE sessions SET last_seen_at = ? WHERE id = ?").run(now.toISOString(), id);
+  }
+
+  sessions(now = new Date()): Session[] {
+    this.db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(now.toISOString());
+    const rows = this.db
+      .prepare("SELECT id, method, user_agent, created_at, last_seen_at, expires_at FROM sessions ORDER BY last_seen_at DESC")
+      .all() as Record<string, string | null>[];
+    return rows.map(toSession);
+  }
+
+  deleteSession(id: string): void {
+    this.db.prepare("DELETE FROM sessions WHERE id = ?").run(id);
+  }
+
+  /** Meldet alle Browser ab, außer dem mit der Sitzung keepId. */
+  deleteOtherSessions(keepId: string | null): number {
+    return Number(this.db.prepare("DELETE FROM sessions WHERE id IS NOT ?").run(keepId).changes);
+  }
+}
+
+function toSession(r: Record<string, string | null>): Session {
+  return {
+    id: r.id!,
+    method: r.method!,
+    userAgent: r.user_agent,
+    createdAt: r.created_at!,
+    lastSeenAt: r.last_seen_at!,
+    expiresAt: r.expires_at!,
+  };
 }
