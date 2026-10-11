@@ -65,7 +65,9 @@ Im Ordner `deploy/` liegt alles für einen Server im Internet. Davor sitzt [Cadd
 5. **Ford-Portal:** die Redirect URI, die das Skript am Ende anzeigt (`https://…/callback`), bei deiner Ford-App eintragen.
 6. Adresse im Browser öffnen, mit Benutzername/Passwort anmelden, dann „Mit Ford anmelden“.
 
-Neuen Stand einspielen: `cd ~/ford-ev-api && sudo bash deploy/update.sh`
+**Automatisch aktualisieren:** Nach einer einmaligen Einrichtung ([deploy/AUTO-DEPLOY.md](deploy/AUTO-DEPLOY.md)) baut und testet GitHub Actions bei jedem Push auf `main` das Docker-Image und spielt es selbst auf dem Server ein.
+
+Neuen Stand von Hand einspielen: `cd ~/ford-ev-api && sudo bash deploy/update.sh`
 Logs ansehen: `sudo docker compose -f deploy/docker-compose.yml logs -f`
 
 ## Entwickeln ohne Docker

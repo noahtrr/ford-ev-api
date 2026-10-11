@@ -25,4 +25,7 @@ RUN mkdir /data && chown node:node /data
 VOLUME /data
 EXPOSE 8080
 USER node
+# Docker prüft regelmäßig, ob die App antwortet (wird beim automatischen Deploy abgewartet).
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["node", "-e", "fetch('http://127.0.0.1:8080/api/health').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
 CMD ["node", "backend/dist/index.js"]
