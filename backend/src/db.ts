@@ -31,6 +31,11 @@ export class Store {
         raw TEXT NOT NULL,
         UNIQUE (vin, ts)
       );
+      CREATE TABLE IF NOT EXISTS departure_times (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        fetched_at TEXT NOT NULL,
+        raw TEXT NOT NULL
+      );
     `);
   }
 
@@ -92,5 +97,27 @@ export class Store {
       // auch für Messwerte, die vor dieser Funktion gespeichert wurden.
       departures: parseDepartureTimes((JSON.parse(r.raw as string) as { metrics?: unknown }).metrics),
     }));
+  }
+
+  /**
+   * Speichert die Antwort von /electric/departure-times.
+   * Gibt false zurück, wenn sie genauso aussieht wie die letzte gespeicherte.
+   */
+  saveDepartureTimes(raw: unknown, now = new Date()): boolean {
+    const json = JSON.stringify(raw);
+    const last = this.db.prepare("SELECT raw FROM departure_times ORDER BY id DESC LIMIT 1").get() as
+      | { raw: string }
+      | undefined;
+    if (last?.raw === json) return false;
+    this.db.prepare("INSERT INTO departure_times (fetched_at, raw) VALUES (?, ?)").run(now.toISOString(), json);
+    return true;
+  }
+
+  /** Die zuletzt gespeicherte Antwort von /electric/departure-times, so wie Ford sie geschickt hat. */
+  latestDepartureTimes(): { fetchedAt: string; data: unknown } | null {
+    const row = this.db.prepare("SELECT fetched_at, raw FROM departure_times ORDER BY id DESC LIMIT 1").get() as
+      | { fetched_at: string; raw: string }
+      | undefined;
+    return row ? { fetchedAt: row.fetched_at, data: JSON.parse(row.raw) } : null;
   }
 }

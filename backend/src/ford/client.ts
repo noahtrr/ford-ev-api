@@ -33,4 +33,9 @@ export class FordClient {
   telemetry(): Promise<unknown> {
     return this.get("telemetry");
   }
+
+  /** Abfahrtszeiten über den offiziellen Endpunkt für Elektroautos. */
+  departureTimes(): Promise<unknown> {
+    return this.get("electric/departure-times");
+  }
 }

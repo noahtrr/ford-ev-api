@@ -19,6 +19,26 @@ export async function pollOnce(client: FordClient, store: Store, log: FastifyBas
   }
 }
 
+/** Holt die Abfahrtszeiten vom offiziellen Endpunkt und speichert die Antwort. */
+export async function pollDepartureTimes(client: FordClient, store: Store, log: FastifyBaseLogger): Promise<void> {
+  try {
+    const changed = store.saveDepartureTimes(await client.departureTimes());
+    log.info({ changed }, "Abfahrtszeiten abgefragt");
+  } catch (err) {
+    if (err instanceof NotLoggedInError) {
+      log.warn(err.message);
+    } else {
+      log.error(err, "Abfrage der Abfahrtszeiten fehlgeschlagen");
+    }
+  }
+}
+
+// Abfahrtszeiten ändern sich selten, daher nur alle 30 Minuten.
+const DEPARTURE_INTERVAL_MINUTES = 30;
+// Eine Minute Abstand zur Telemetrie-Abfrage, damit nicht zwei Anfragen in derselben Minute
+// bei Ford ankommen (Limit: etwa eine Anfrage pro Minute).
+const DEPARTURE_OFFSET_MS = 60_000;
+
 export function startPoller(
   client: FordClient,
   store: Store,
@@ -27,5 +47,19 @@ export function startPoller(
 ): () => void {
   void pollOnce(client, store, log);
   const timer = setInterval(() => void pollOnce(client, store, log), intervalMinutes * 60_000);
-  return () => clearInterval(timer);
+
+  let departureTimer: NodeJS.Timeout | undefined;
+  const departureStart = setTimeout(() => {
+    void pollDepartureTimes(client, store, log);
+    departureTimer = setInterval(
+      () => void pollDepartureTimes(client, store, log),
+      DEPARTURE_INTERVAL_MINUTES * 60_000,
+    );
+  }, DEPARTURE_OFFSET_MS);
+
+  return () => {
+    clearInterval(timer);
+    clearTimeout(departureStart);
+    clearInterval(departureTimer);
+  };
 }

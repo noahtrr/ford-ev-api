@@ -40,4 +40,10 @@ describe("server", () => {
     const res = await setup().inject("/callback?code=x&state=falsch");
     expect(res.statusCode).toBe(400);
   });
+
+  it("liefert null, solange keine Abfahrtszeiten abgefragt wurden", async () => {
+    const res = await setup().inject("/api/departure-times");
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toBe("null");
+  });
 });
