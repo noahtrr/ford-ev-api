@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    env_file: .env
+    volumes:
+      # Datenbank mit Tokens und Messwerten bleibt auch nach einem Neustart erhalten.
+      - ford-data:/data
+    restart: unless-stopped
+
+volumes:
+  ford-data:
