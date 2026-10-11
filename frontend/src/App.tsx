@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 interface Departure {
   day: string;
@@ -7,15 +7,179 @@ interface Departure {
   preconditioning: boolean | null;
 }
 
+interface Opening {
+  name: string;
+  open: boolean | null;
+}
+
 interface Snapshot {
   vin: string;
   ts: string;
   socPct: number | null;
   rangeKm: number | null;
   odometerKm: number | null;
+  lat: number | null;
+  lon: number | null;
   plugStatus: string | null;
   chargeStatus: string | null;
   departures: Departure[] | null;
+  locked: boolean | null;
+  doors: Opening[] | null;
+  windows: Opening[] | null;
+  battery12v: { socPct: number | null; voltage: number | null } | null;
+  alarm: string | null;
+}
+
+interface VehicleInfo {
+  vin: string;
+  model: string | null;
+  year: number | null;
+  imageUrl: string | null;
+}
+
+/** null = Fahrzeugdaten wurden noch nie bei Ford abgefragt. */
+type VehicleInfoResponse = { fetchedAt: string; vehicles: VehicleInfo[] } | null;
+
+const NO_DATA = "Ford liefert keine Daten";
+
+/** Eine Kachel in der Übersicht. Ohne value zeigt sie, dass Ford den Wert nicht schickt. */
+function Tile({
+  title,
+  value,
+  tone,
+  children,
+}: {
+  title: string;
+  value: string | null;
+  tone?: "ok" | "warn";
+  children?: ReactNode;
+}) {
+  return (
+    <div className={`tile${value === null ? " missing" : ""}${tone ? ` ${tone}` : ""}`}>
+      <span className="tile-title">{title}</span>
+      <strong className="tile-value">{value ?? NO_DATA}</strong>
+      {value !== null && children}
+    </div>
+  );
+}
+
+/** Liste von Türen oder Fenstern mit offen/zu. */
+function Openings({ items }: { items: Opening[] }) {
+  return (
+    <ul className="openings">
+      {items.map((o) => (
+        <li key={o.name} className={o.open ? "open" : undefined}>
+          <span>{o.name}</span>
+          <span>{o.open === null ? "unbekannt" : o.open ? "offen" : "zu"}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Kurzer Text wie "Alle zu" oder "2 offen". */
+function openingsSummary(items: Opening[] | null): string | null {
+  if (!items) return null;
+  const open = items.filter((o) => o.open).length;
+  if (open > 0) return `${open} offen`;
+  return items.some((o) => o.open === false) ? "Alle zu" : "Unbekannt";
+}
+
+function DoorsTile({ doors, locked }: { doors: Opening[] | null; locked: boolean | null }) {
+  const summary = openingsSummary(doors);
+  const lockText = locked === null ? null : locked ? "Verriegelt" : "Entriegelt";
+  const value = summary && lockText ? `${summary} · ${lockText}` : (summary ?? lockText);
+  const warn = doors?.some((o) => o.open) || locked === false;
+  return (
+    <Tile title="Türen" value={value} tone={value === null ? undefined : warn ? "warn" : "ok"}>
+      {doors && <Openings items={doors} />}
+    </Tile>
+  );
+}
+
+function WindowsTile({ windows }: { windows: Opening[] | null }) {
+  const summary = openingsSummary(windows);
+  const warn = windows?.some((o) => o.open);
+  return (
+    <Tile title="Fenster" value={summary} tone={summary === null ? undefined : warn ? "warn" : "ok"}>
+      {windows && <Openings items={windows} />}
+    </Tile>
+  );
+}
+
+function Battery12vTile({ battery }: { battery: Snapshot["battery12v"] }) {
+  const parts = battery
+    ? [battery.socPct !== null ? `${Math.round(battery.socPct)} %` : null, battery.voltage !== null ? `${battery.voltage.toFixed(1)} V` : null]
+    : [];
+  const value = parts.filter(Boolean).join(" · ") || null;
+  // Unter 12,2 V oder 50 % ist eine 12-V-Batterie ziemlich leer.
+  const low = !!battery && ((battery.voltage !== null && battery.voltage < 12.2) || (battery.socPct !== null && battery.socPct < 50));
+  return <Tile title="12-V-Batterie" value={value} tone={value === null ? undefined : low ? "warn" : "ok"} />;
+}
+
+function PositionTile({ lat, lon }: { lat: number | null; lon: number | null }) {
+  if (lat === null || lon === null) return <Tile title="Standort" value={null} />;
+  const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+  return (
+    <Tile title="Standort" value={`${lat.toFixed(5)}, ${lon.toFixed(5)}`}>
+      <a className="button small" href={url} target="_blank" rel="noopener noreferrer">
+        In Google Maps öffnen
+      </a>
+    </Tile>
+  );
+}
+
+/** Übersetzt Fords Alarm-Status. Unbekannte Werte werden so angezeigt, wie Ford sie schickt. */
+function alarmText(alarm: string | null): { text: string | null; tone?: "ok" | "warn" } {
+  if (alarm === null) return { text: null };
+  const a = alarm.toUpperCase();
+  if (["ARMED", "SET", "ON"].includes(a)) return { text: "Scharf", tone: "ok" };
+  if (["DISARMED", "NOT_ARMED", "UNSET", "NOT_SET", "OFF"].includes(a)) return { text: "Aus" };
+  if (["TRIGGERED", "ACTIVE", "ALARM", "SOUNDING"].includes(a)) return { text: "Ausgelöst!", tone: "warn" };
+  return { text: alarm };
+}
+
+function AlarmTile({ alarm }: { alarm: string | null }) {
+  const { text, tone } = alarmText(alarm);
+  return <Tile title="Alarmanlage" value={text} tone={tone} />;
+}
+
+/** Ein einfaches gezeichnetes Auto, wenn Ford kein Bild liefert. */
+function CarDrawing() {
+  return (
+    <svg viewBox="0 0 240 90" className="car-drawing" aria-hidden="true">
+      <path
+        d="M14 62 C14 52 20 48 34 46 L62 42 C76 28 92 20 120 20 C146 20 162 28 180 42 L206 46 C222 49 228 54 228 62 L228 68 L14 68 Z"
+        fill="currentColor"
+        opacity="0.18"
+      />
+      <path d="M70 42 C82 30 96 26 118 26 L118 42 Z M126 26 C146 26 158 32 170 42 L126 42 Z" fill="currentColor" opacity="0.35" />
+      <circle cx="62" cy="68" r="14" fill="currentColor" opacity="0.6" />
+      <circle cx="182" cy="68" r="14" fill="currentColor" opacity="0.6" />
+      <circle cx="62" cy="68" r="6" fill="currentColor" opacity="0.25" />
+      <circle cx="182" cy="68" r="6" fill="currentColor" opacity="0.25" />
+    </svg>
+  );
+}
+
+/** Bild oben auf der Karte: das Foto von Ford, wenn es eins gibt, sonst eine Zeichnung. */
+function VehicleImage({ info, fetched }: { info: VehicleInfo | undefined; fetched: boolean }) {
+  const [broken, setBroken] = useState(false);
+  const name = [info?.model, info?.year].filter(Boolean).join(" ");
+  return (
+    <figure className="vehicle-image">
+      {info?.imageUrl && !broken ? (
+        <img src={info.imageUrl} alt={name || "Mein Auto"} onError={() => setBroken(true)} />
+      ) : (
+        <>
+          <CarDrawing />
+          <figcaption>
+            {fetched ? "Ford liefert über die API kein Fahrzeugbild." : "Fahrzeugdaten werden noch bei Ford abgefragt."}
+          </figcaption>
+        </>
+      )}
+    </figure>
+  );
 }
 
 const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
@@ -77,6 +241,7 @@ function show(value: number | string | null, unit = ""): string {
 export function App() {
   const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [vehicleInfo, setVehicleInfo] = useState<VehicleInfoResponse>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -84,6 +249,7 @@ export function App() {
       setLoggedIn(status.loggedIn);
       if (status.loggedIn) {
         setSnapshots(await fetch("/api/snapshots/latest").then((r) => r.json()));
+        setVehicleInfo(await fetch("/api/vehicle-info").then((r) => r.json()));
       }
     };
     void load();
@@ -110,25 +276,31 @@ export function App() {
     <main>
       <h1>Mein Ford</h1>
       {snapshots.length === 0 && <p>Noch keine Daten. Die erste Abfrage läuft gleich.</p>}
-      {snapshots.map((s) => (
-        <section key={s.vin} className="card">
-          <h2>{s.vin}</h2>
-          <dl>
-            <dt>Akku</dt>
-            <dd>{show(s.socPct, " %")}</dd>
-            <dt>Reichweite</dt>
-            <dd>{show(s.rangeKm, " km")}</dd>
-            <dt>Kilometerstand</dt>
-            <dd>{show(s.odometerKm, " km")}</dd>
-            <dt>Ladekabel</dt>
-            <dd>{show(s.plugStatus)}</dd>
-            <dt>Ladestatus</dt>
-            <dd>{show(s.chargeStatus)}</dd>
-          </dl>
-          <Departures departures={s.departures ?? null} />
-          <small>Stand: {new Date(s.ts).toLocaleString("de-DE")}</small>
-        </section>
-      ))}
+      {snapshots.map((s) => {
+        const info = vehicleInfo?.vehicles.find((v) => v.vin === s.vin);
+        const name = [info?.model, info?.year].filter(Boolean).join(" ");
+        return (
+          <section key={s.vin} className="card">
+            <VehicleImage info={info} fetched={vehicleInfo !== null} />
+            <h2>{name || s.vin}</h2>
+            {name && <p className="vin">{s.vin}</p>}
+            <div className="tiles">
+              <Tile title="Akku" value={s.socPct === null ? null : show(s.socPct, " %")} />
+              <Tile title="Reichweite" value={s.rangeKm === null ? null : show(s.rangeKm, " km")} />
+              <Tile title="Kilometerstand" value={s.odometerKm === null ? null : show(s.odometerKm, " km")} />
+              <Tile title="Ladekabel" value={s.plugStatus} />
+              <Tile title="Ladestatus" value={s.chargeStatus} />
+              <DoorsTile doors={s.doors ?? null} locked={s.locked ?? null} />
+              <WindowsTile windows={s.windows ?? null} />
+              <Battery12vTile battery={s.battery12v ?? null} />
+              <PositionTile lat={s.lat ?? null} lon={s.lon ?? null} />
+              <AlarmTile alarm={s.alarm ?? null} />
+            </div>
+            <Departures departures={s.departures ?? null} />
+            <small>Stand: {new Date(s.ts).toLocaleString("de-DE")}</small>
+          </section>
+        );
+      })}
     </main>
   );
 }

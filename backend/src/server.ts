@@ -38,6 +38,9 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
 
   app.get("/api/vehicles", async () => client.garage());
 
+  // Modell, Baujahr und (falls Ford einen schickt) Bild-Link je Auto, aus der gespeicherten /garage-Antwort.
+  app.get("/api/vehicle-info", async () => store.vehicleInfo());
+
   app.get("/api/snapshots/latest", async () => store.latestSnapshots());
 
   // Die letzte Antwort von Fords /electric/departure-times, unverändert. Zum Nachsehen,

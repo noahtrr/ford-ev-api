@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDepartureTimes, parseTelemetry } from "./telemetry.js";
+import { parseBodyStatus, parseDepartureTimes, parseTelemetry } from "./telemetry.js";
 
 const sample = {
   vin: "WF0TEST123",
@@ -99,5 +99,76 @@ describe("parseDepartureTimes", () => {
     const [s] = parseTelemetry({ vin: "X", metrics: { odometer: { value: 1, updateTime: "2026-10-11T10:00:00Z" }, ...withDepartures } });
     expect(s.ts).toBe("2026-10-11T11:00:00Z");
     expect(s.departures).toHaveLength(2);
+  });
+});
+
+// So schicken Ford-Autos Türen, Fenster, Schloss, 12-V-Batterie und Alarm (gekürzt).
+const body = {
+  doorStatus: [
+    { value: "CLOSED", vehicleDoor: "UNSPECIFIED_FRONT", vehicleSide: "DRIVER" },
+    { value: "AJAR", vehicleDoor: "UNSPECIFIED_FRONT", vehicleSide: "PASSENGER" },
+    { value: "CLOSED", vehicleDoor: "REAR_LEFT" },
+    { value: "INVALID", vehicleDoor: "TAILGATE" },
+  ],
+  hoodStatus: { value: "CLOSED" },
+  windowStatus: [
+    { value: { doubleRange: { lowerBound: 0, upperBound: 0 } }, vehicleWindow: "UNSPECIFIED_FRONT", vehicleSide: "DRIVER" },
+    { value: { doubleRange: { lowerBound: 0, upperBound: 25 } }, vehicleWindow: "UNSPECIFIED_REAR", vehicleSide: "PASSENGER" },
+    { value: "FULLY_CLOSED", vehicleWindow: "FRONT_RIGHT" },
+  ],
+  doorLockStatus: [
+    { value: "LOCKED", vehicleDoor: "ALL_DOORS" },
+    { value: "DOUBLE_LOCKED", vehicleDoor: "FRONT_LEFT" },
+  ],
+  batteryStateOfCharge: { value: 87, vehicleBattery: "PRIMARY_BATTERY" },
+  batteryVoltage: { value: 12.6 },
+  alarmStatus: { value: "ARMED" },
+};
+
+describe("parseBodyStatus", () => {
+  it("liest Türen, Fenster, Schloss, 12-V-Batterie und Alarm aus", () => {
+    expect(parseBodyStatus(body)).toEqual({
+      locked: true,
+      doors: [
+        { name: "Fahrertür", open: false },
+        { name: "Beifahrertür", open: true },
+        { name: "Hinten links", open: false },
+        { name: "Heckklappe", open: null },
+        { name: "Motorhaube", open: false },
+      ],
+      windows: [
+        { name: "Fahrerfenster", open: false },
+        { name: "Hinten Beifahrerseite", open: true },
+        { name: "Vorne rechts", open: false },
+      ],
+      battery12v: { socPct: 87, voltage: 12.6 },
+      alarm: "ARMED",
+    });
+  });
+
+  it("meldet unverriegelt, sobald eine Tür offen ist", () => {
+    const status = parseBodyStatus({ doorLockStatus: [{ value: "LOCKED" }, { value: "UNLOCKED" }] });
+    expect(status.locked).toBe(false);
+  });
+
+  it("nimmt keine Werte vom Fahrakku als 12-V-Batterie", () => {
+    const status = parseBodyStatus({ batteryStateOfCharge: { value: 55, vehicleBattery: "TRACTION_BATTERY" } });
+    expect(status.battery12v).toBeNull();
+  });
+
+  it("liefert überall null, wenn Ford nichts davon schickt", () => {
+    expect(parseBodyStatus({ odometer: { value: 1 } })).toEqual({
+      locked: null,
+      doors: null,
+      windows: null,
+      battery12v: null,
+      alarm: null,
+    });
+  });
+
+  it("steckt im Messwert aus parseTelemetry", () => {
+    const [s] = parseTelemetry({ vin: "X", metrics: body });
+    expect(s.alarm).toBe("ARMED");
+    expect(s.doors).toHaveLength(5);
   });
 });

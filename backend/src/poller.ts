@@ -36,6 +36,31 @@ export async function pollDepartureTimes(client: FordClient, store: Store, log: 
   }
 }
 
+const GARAGE_MAX_AGE_MS = 24 * 60 * 60_000;
+const GARAGE_INTERVAL_MINUTES = 30;
+// Zwei Minuten Abstand zur Telemetrie und eine zu den Abfahrtszeiten (Limit: etwa eine Anfrage pro Minute).
+const GARAGE_OFFSET_MS = 2 * 60_000;
+
+/**
+ * Holt einmal am Tag Modell und Baujahr (/garage) für das Fahrzeugbild oben auf der Seite.
+ * Wird alle 30 Minuten aufgerufen, fragt Ford aber nur, wenn die gespeicherten Daten fehlen
+ * oder älter als einen Tag sind. So klappt es auch, wenn man sich erst später anmeldet.
+ */
+export async function pollGarage(client: FordClient, store: Store, log: FastifyBaseLogger, now = new Date()) {
+  const last = store.garageFetchedAt();
+  if (last && now.getTime() - Date.parse(last) < GARAGE_MAX_AGE_MS) return;
+  try {
+    store.saveGarage(await client.garage(), now);
+    log.info("Fahrzeugdaten (Garage) abgefragt");
+  } catch (err) {
+    if (err instanceof NotLoggedInError) {
+      log.warn(err.message);
+    } else {
+      log.error(err, "Abfrage der Fahrzeugdaten fehlgeschlagen");
+    }
+  }
+}
+
 // Abfahrtszeiten ändern sich selten, daher nur alle 30 Minuten.
 const DEPARTURE_INTERVAL_MINUTES = 30;
 // Eine Minute Abstand zur Telemetrie-Abfrage, damit nicht zwei Anfragen in derselben Minute
@@ -60,9 +85,17 @@ export function startPoller(
     );
   }, DEPARTURE_OFFSET_MS);
 
+  let garageTimer: NodeJS.Timeout | undefined;
+  const garageStart = setTimeout(() => {
+    void pollGarage(client, store, log);
+    garageTimer = setInterval(() => void pollGarage(client, store, log), GARAGE_INTERVAL_MINUTES * 60_000);
+  }, GARAGE_OFFSET_MS);
+
   return () => {
     clearInterval(timer);
     clearTimeout(departureStart);
     clearInterval(departureTimer);
+    clearTimeout(garageStart);
+    clearInterval(garageTimer);
   };
 }
