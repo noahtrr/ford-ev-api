@@ -52,4 +52,20 @@ describe("server", () => {
     expect(res.statusCode).toBe(200);
     expect(res.body).toBe("null");
   });
+
+  it("beschreibt die eigenen Endpunkte als OpenAPI", async () => {
+    const res = await setup().inject("/api/docs/json");
+    expect(res.statusCode).toBe(200);
+    const paths = Object.keys(res.json().paths);
+    expect(paths).toEqual(
+      expect.arrayContaining(["/api/status", "/api/snapshots/latest", "/api/vehicle-info", "/api/departure-times", "/login"]),
+    );
+    expect(paths).not.toContain("/api/docs/json");
+  });
+
+  it("zeigt die Swagger-Oberfläche unter /api/docs", async () => {
+    const res = await setup().inject("/api/docs/");
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["content-type"]).toMatch(/html/);
+  });
 });
