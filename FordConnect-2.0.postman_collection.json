@@ -1,0 +1,390 @@
+{
+	"info": {
+		"_postman_id": "be0d2b91-0377-4436-aa1e-391e786f4381",
+		"name": "FordConnect-2.0",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "39886836"
+	},
+	"item": [
+		{
+			"name": "Auth Code Exchange",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "grant_type",
+							"value": "authorization_code",
+							"type": "text"
+						},
+						{
+							"key": "code",
+							"value": "<<YOUR_CODE>>",
+							"type": "text"
+						},
+						{
+							"key": "redirect_uri",
+							"value": "<<YOUR_REDIRECT_URI>>",
+							"type": "text"
+						},
+						{
+							"key": "client_id",
+							"value": "<<YOUR_CLIENT_ID>>",
+							"type": "text"
+						},
+						{
+							"key": "client_secret",
+							"value": "<<YOUR_CLIENT_SECRET>>",
+							"type": "text"
+						},
+						{
+							"key": "scope",
+							"value": "<<YOUR_CLIENT_ID>> offline_access openid",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://api.vehicle.ford.com/dah2vb2cprod.onmicrosoft.com/oauth2/v2.0/token?p=B2C_1A_FCON_AUTHORIZE",
+					"protocol": "https",
+					"host": [
+						"api",
+						"vehicle",
+						"ford",
+						"com"
+					],
+					"path": [
+						"dah2vb2cprod.onmicrosoft.com",
+						"oauth2",
+						"v2.0",
+						"token"
+					],
+					"query": [
+						{
+							"key": "p",
+							"value": "B2C_1A_FCON_AUTHORIZE"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Refresh Token Exchange",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "urlencoded",
+					"urlencoded": [
+						{
+							"key": "grant_type",
+							"value": "refresh_token",
+							"type": "text"
+						},
+						{
+							"key": "refresh_token",
+							"value": "<<YOUR_REFRESH_TOKEN>>",
+							"type": "text"
+						},
+						{
+							"key": "redirect_uri",
+							"value": "<<YOUR_REDIRECT_URI>>",
+							"type": "text"
+						},
+						{
+							"key": "client_id",
+							"value": "<<YOUR_CLIENT_ID>>",
+							"type": "text"
+						},
+						{
+							"key": "scope",
+							"value": "<<YOUR_CLIENT_ID>> offline_access openid",
+							"type": "text"
+						},
+						{
+							"key": "client_secret",
+							"value": "<<YOUR_CLIENT_SECRET>>",
+							"type": "text"
+						}
+					]
+				},
+				"url": {
+					"raw": "https://api.vehicle.ford.com/dah2vb2cprod.onmicrosoft.com/oauth2/v2.0/token?p=B2C_1A_FCON_AUTHORIZE",
+					"protocol": "https",
+					"host": [
+						"api",
+						"vehicle",
+						"ford",
+						"com"
+					],
+					"path": [
+						"dah2vb2cprod.onmicrosoft.com",
+						"oauth2",
+						"v2.0",
+						"token"
+					],
+					"query": [
+						{
+							"key": "p",
+							"value": "B2C_1A_FCON_AUTHORIZE"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Telemetry",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "<<YOUR_ACCESS_TOKEN>>",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.vehicle.ford.com/fcon-query/v1/telemetry",
+					"protocol": "https",
+					"host": [
+						"api",
+						"vehicle",
+						"ford",
+						"com"
+					],
+					"path": [
+						"fcon-query",
+						"v1",
+						"telemetry"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Garage",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "<<YOUR_ACCESS_TOKEN>>",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.vehicle.ford.com/fcon-query/v1/garage",
+					"protocol": "https",
+					"host": [
+						"api",
+						"vehicle",
+						"ford",
+						"com"
+					],
+					"path": [
+						"fcon-query",
+						"v1",
+						"garage"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Vehicle Health - Alerts",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "<<YOUR_ACCESS_TOKEN>>",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.vehicle.ford.com/fcon-query/v1/vehicle-health/alerts",
+					"protocol": "https",
+					"host": [
+						"api",
+						"vehicle",
+						"ford",
+						"com"
+					],
+					"path": [
+						"fcon-query",
+						"v1",
+						"vehicle-health",
+						"alerts"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Wallbox",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "<<YOUR_ACCESS_TOKEN>>",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.vehicle.ford.com/fcon-query/v1/wallbox",
+					"protocol": "https",
+					"host": [
+						"api",
+						"vehicle",
+						"ford",
+						"com"
+					],
+					"path": [
+						"fcon-query",
+						"v1",
+						"wallbox"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Electric -  Departure Times",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "<<YOUR_ACCESS_TOKEN>>",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.vehicle.ford.com/fcon-query/v1/electric/departure-times",
+					"protocol": "https",
+					"host": [
+						"api",
+						"vehicle",
+						"ford",
+						"com"
+					],
+					"path": [
+						"fcon-query",
+						"v1",
+						"electric",
+						"departure-times"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Electric - Charge Schedules",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "<<YOUR_ACCESS_TOKEN>>",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://api.vehicle.ford.com/fcon-query/v1/electric/charge-schedules",
+					"protocol": "https",
+					"host": [
+						"api",
+						"vehicle",
+						"ford",
+						"com"
+					],
+					"path": [
+						"fcon-query",
+						"v1",
+						"electric",
+						"charge-schedules"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "FCCS - Charging Station Activity",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "<<YOUR_ACCESS_TOKEN>>",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [
+					{
+						"key": "chargingStationId",
+						"value": "b99d7f71-1c64-4d16-b0be-04009599f099",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "https://api.vehicle.ford.com/fcon-query/v1/fccs?startDate=&endDate=",
+					"protocol": "https",
+					"host": [
+						"api",
+						"vehicle",
+						"ford",
+						"com"
+					],
+					"path": [
+						"fcon-query",
+						"v1",
+						"fccs"
+					],
+					"query": [
+						{
+							"key": "startDate",
+							"value": ""
+						},
+						{
+							"key": "endDate",
+							"value": ""
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
