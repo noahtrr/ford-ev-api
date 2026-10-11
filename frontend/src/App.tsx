@@ -1,5 +1,12 @@
 import { useEffect, useState } from "react";
 
+interface Departure {
+  day: string;
+  time: string;
+  enabled: boolean;
+  preconditioning: boolean | null;
+}
+
 interface Snapshot {
   vin: string;
   ts: string;
@@ -8,6 +15,51 @@ interface Snapshot {
   odometerKm: number | null;
   plugStatus: string | null;
   chargeStatus: string | null;
+  departures: Departure[];
+}
+
+const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
+const DAY_NAMES = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
+
+/** Minuten ab Montag 00:00, damit sich Abfahrtszeiten vergleichen lassen. */
+function minutesInWeek(day: number, time: string): number {
+  const [h, m] = time.split(":").map(Number);
+  return day * 24 * 60 + h * 60 + m;
+}
+
+/** Die nächste eingeschaltete Abfahrtszeit ab jetzt (Ortszeit des Browsers). */
+function nextDeparture(departures: Departure[], now = new Date()): Departure | undefined {
+  const week = 7 * 24 * 60;
+  const today = (now.getDay() + 6) % 7; // JavaScript zählt ab Sonntag, Ford ab Montag
+  const nowMinutes = minutesInWeek(today, `${now.getHours()}:${now.getMinutes()}`);
+  const until = (d: Departure) => (minutesInWeek(DAYS.indexOf(d.day), d.time) - nowMinutes + week) % week;
+  return departures
+    .filter((d) => d.enabled)
+    .reduce<Departure | undefined>((best, d) => (!best || until(d) < until(best) ? d : best), undefined);
+}
+
+function Departures({ departures }: { departures: Departure[] }) {
+  const active = departures.filter((d) => d.enabled);
+  const next = nextDeparture(departures);
+  return (
+    <div className="departures">
+      <h3>Abfahrtszeiten</h3>
+      {active.length === 0 ? (
+        <p>Keine Abfahrtszeit eingestellt.</p>
+      ) : (
+        <ul>
+          {active.map((d) => (
+            <li key={`${d.day}-${d.time}`} className={d === next ? "next" : undefined}>
+              <span>{DAY_NAMES[DAYS.indexOf(d.day)]}</span>
+              <strong>{d.time} Uhr</strong>
+              {d === next && <span className="tag">Nächste</span>}
+              {d.preconditioning && <span className="tag">Vorklimatisieren</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function show(value: number | string | null, unit = ""): string {
@@ -65,6 +117,7 @@ export function App() {
             <dt>Ladestatus</dt>
             <dd>{show(s.chargeStatus)}</dd>
           </dl>
+          <Departures departures={s.departures ?? []} />
           <small>Stand: {new Date(s.ts).toLocaleString("de-DE")}</small>
         </section>
       ))}

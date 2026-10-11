@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Tokens } from "./ford/auth.js";
-import type { VehicleSnapshot } from "./ford/telemetry.js";
+import { parseDepartureTimes, type VehicleSnapshot } from "./ford/telemetry.js";
 
 export class Store {
   private db: DatabaseSync;
@@ -73,7 +73,7 @@ export class Store {
   latestSnapshots(): Omit<VehicleSnapshot, "raw">[] {
     const rows = this.db
       .prepare(
-        `SELECT vin, ts, soc_pct, range_km, odometer_km, lat, lon, plug_status, charge_status
+        `SELECT vin, ts, soc_pct, range_km, odometer_km, lat, lon, plug_status, charge_status, raw
          FROM snapshots s
          WHERE ts = (SELECT MAX(ts) FROM snapshots WHERE vin = s.vin)`,
       )
@@ -88,6 +88,9 @@ export class Store {
       lon: r.lon as number | null,
       plugStatus: r.plug_status as string | null,
       chargeStatus: r.charge_status as string | null,
+      // Abfahrtszeiten werden aus der gespeicherten Ford-Antwort gelesen, so gibt es sie
+      // auch für Messwerte, die vor dieser Funktion gespeichert wurden.
+      departures: parseDepartureTimes((JSON.parse(r.raw as string) as { metrics?: unknown }).metrics),
     }));
   }
 }
