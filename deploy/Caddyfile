@@ -1,0 +1,7 @@
+# Die Werte kommen aus deploy/caddy.env (legt setup.sh an).
+{$DOMAIN} {
+	basic_auth {
+		{$LOGIN_USER} {$LOGIN_HASH}
+	}
+	reverse_proxy app:8080
+}

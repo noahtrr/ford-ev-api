@@ -43,6 +43,31 @@ Die Datenbank liegt im Docker-Volume `ford-data` und bleibt bei Neustarts erhalt
 
 > Läuft der Container auf einem anderen Rechner (z. B. Server oder Raspberry Pi), muss die Redirect URI im Ford-Portal und in `.env` auf dessen Adresse zeigen, oder du nutzt einen SSH-Tunnel: `ssh -L 8080:localhost:8080 dein-server`.
 
+## Betrieb auf einem Server (z. B. OVH VPS)
+
+Im Ordner `deploy/` liegt alles für einen Server im Internet. Davor sitzt [Caddy](https://caddyserver.com): holt automatisch ein HTTPS-Zertifikat und fragt nach Benutzername und Passwort, damit niemand Fremdes Standort und Akkustand deines Autos sieht.
+
+1. **Server bestellen:** im OVH-Kundencenter einen VPS (VPS-1 reicht) mit **Ubuntu 24.04** bestellen. Ein Standort in Europa ist am schnellsten. Den Zugang (IP, Benutzer `ubuntu`, Passwort) schickt OVH per E-Mail.
+2. **Einloggen:** im Terminal (Windows: PowerShell) `ssh ubuntu@DEINE-IP`, beim ersten Mal das Passwort aus der E-Mail und danach ein neues vergeben.
+3. **Zugriff auf das private Repo** mit einem Deploy-Key, der nur lesen darf:
+   ```bash
+   ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+   cat ~/.ssh/id_ed25519.pub
+   ```
+   Die ausgegebene Zeile auf GitHub unter *Repo → Settings → Deploy keys → Add deploy key* einfügen (Haken bei „write access“ **nicht** setzen).
+4. **Repo holen und Setup starten:**
+   ```bash
+   git clone git@github.com:noahtrr/ford-ev-api.git
+   cd ford-ev-api
+   sudo bash deploy/setup.sh
+   ```
+   Das Skript installiert Docker, schaltet die Firewall ein (nur SSH, HTTP, HTTPS) und fragt nach Ford Client ID und Secret sowie einem Passwort für die Weboberfläche. Ohne eigene Domain nimmst du einfach die vorgeschlagene Adresse `DEINE-IP.sslip.io`.
+5. **Ford-Portal:** die Redirect URI, die das Skript am Ende anzeigt (`https://…/callback`), bei deiner Ford-App eintragen.
+6. Adresse im Browser öffnen, mit Benutzername/Passwort anmelden, dann „Mit Ford anmelden“.
+
+Neuen Stand einspielen: `cd ~/ford-ev-api && sudo bash deploy/update.sh`
+Logs ansehen: `sudo docker compose -f deploy/docker-compose.yml logs -f`
+
 ## Entwickeln ohne Docker
 
 Voraussetzung: Node.js 22.
