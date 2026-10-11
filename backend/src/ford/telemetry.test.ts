@@ -95,6 +95,23 @@ describe("parseDepartureTimes", () => {
     expect(parseDepartureTimes(empty)).toEqual([]);
   });
 
+  it("liest auch Zeiten, die direkt unter departureSchedules liegen (laut Ford-Doku)", () => {
+    const direct = {
+      configurations: {
+        xevDepartureSchedulesSetting: {
+          value: {
+            departureSchedules: [
+              { scheduleStatus: "ON", schedule: { weeklySchedule: { dayOfWeek: "FRIDAY", timeOfDay: "06:00" } } },
+            ],
+          },
+        },
+      },
+    };
+    expect(parseDepartureTimes(direct)).toEqual([
+      { day: "FRIDAY", time: "06:00", enabled: true, preconditioning: null },
+    ]);
+  });
+
   it("zählt eine geänderte Abfahrtszeit als neuen Messwert", () => {
     const [s] = parseTelemetry({ vin: "X", metrics: { odometer: { value: 1, updateTime: "2026-10-11T10:00:00Z" }, ...withDepartures } });
     expect(s.ts).toBe("2026-10-11T11:00:00Z");
@@ -144,6 +161,17 @@ describe("parseBodyStatus", () => {
       battery12v: { socPct: 87, voltage: 12.6 },
       alarm: "ARMED",
     });
+  });
+
+  it("meldet die Motorhaube bei AJAR als offen (laut Ford-Doku)", () => {
+    expect(parseBodyStatus({ hoodStatus: { value: "AJAR" } }).doors).toEqual([{ name: "Motorhaube", open: true }]);
+  });
+
+  it("versteht Fenster mit intRange", () => {
+    const status = parseBodyStatus({
+      windowStatus: [{ value: { intRange: { lowerBound: 0, upperBound: 10 } }, vehicleWindow: "FRONT_LEFT" }],
+    });
+    expect(status.windows).toEqual([{ name: "Vorne links", open: true }]);
   });
 
   it("meldet unverriegelt, sobald eine Tür offen ist", () => {

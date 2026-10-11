@@ -1,5 +1,6 @@
 // Liest aus Fords /garage-Antwort, welches Auto es ist (Modell, Baujahr) und ob Ford ein Bild mitschickt.
-// Die FordConnect Query API hat keinen eigenen Endpunkt für Fahrzeugbilder. Falls Ford in der
+// Laut Ford-Doku enthält die Antwort u. a. vin, nickName, modelName, modelYear und engineType.
+// Fords Postman-Sammlung kennt keinen Endpunkt für Fahrzeugbilder. Falls Ford in der
 // Garage-Antwort einen Bild-Link mitschickt, wird er hier gefunden, sonst bleibt imageUrl null.
 
 export interface VehicleInfo {
