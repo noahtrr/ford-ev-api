@@ -21,4 +21,15 @@ describe("Store", () => {
     store.saveTokens(tokens);
     expect(store.loadTokens()).toEqual(tokens);
   });
+
+  it("speichert die Abfahrtszeiten nur, wenn sie sich geändert haben", () => {
+    const store = new Store(":memory:");
+    expect(store.latestDepartureTimes()).toBeNull();
+    const first = { departureTimes: { vin: "V1", isDepartureTimesEnabled: true } };
+    expect(store.saveDepartureTimes(first, new Date("2026-10-11T10:00:00Z"))).toBe(true);
+    expect(store.saveDepartureTimes(first)).toBe(false);
+    const second = { departureTimes: { vin: "V1", isDepartureTimesEnabled: false } };
+    expect(store.saveDepartureTimes(second, new Date("2026-10-11T10:30:00Z"))).toBe(true);
+    expect(store.latestDepartureTimes()).toEqual({ fetchedAt: "2026-10-11T10:30:00.000Z", data: second });
+  });
 });

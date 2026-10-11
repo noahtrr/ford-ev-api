@@ -40,6 +40,10 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
 
   app.get("/api/snapshots/latest", async () => store.latestSnapshots());
 
+  // Die letzte Antwort von Fords /electric/departure-times, unverändert. Zum Nachsehen,
+  // wie Ford die Abfahrtszeiten für dein Auto wirklich schickt.
+  app.get("/api/departure-times", async () => store.latestDepartureTimes());
+
   if (publicDir && existsSync(publicDir)) {
     app.register(fastifyStatic, { root: publicDir });
   }
