@@ -27,6 +27,9 @@ export async function pollDepartureTimes(client: FordClient, store: Store, log: 
   } catch (err) {
     if (err instanceof NotLoggedInError) {
       log.warn(err.message);
+    } else if (err instanceof Error && err.message.includes(" 403")) {
+      // Ford gibt den Endpunkt nicht für jedes Auto frei. Kein Absturz, nur ein Hinweis.
+      log.warn("Ford gibt die Abfahrtszeiten für dieses Auto nicht frei (403)");
     } else {
       log.error(err, "Abfrage der Abfahrtszeiten fehlgeschlagen");
     }

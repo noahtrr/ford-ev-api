@@ -11,7 +11,7 @@ describe("Store", () => {
     expect(store.saveSnapshot(older)).toBe(true);
     expect(store.saveSnapshot(older)).toBe(false);
     expect(store.saveSnapshot(newer)).toBe(true);
-    expect(store.latestSnapshots()).toEqual([expect.objectContaining({ vin: "V1", odometerKm: 20, departures: [] })]);
+    expect(store.latestSnapshots()).toEqual([expect.objectContaining({ vin: "V1", odometerKm: 20, departures: null })]);
   });
 
   it("merkt sich die Tokens", () => {

@@ -82,12 +82,17 @@ describe("parseDepartureTimes", () => {
   it("schaltet alle Zeiten aus, wenn die Funktion im Auto aus ist", () => {
     const off = structuredClone(withDepartures);
     off.configurations.xevDepartureSchedulesSetting.value.departureScheduleFeatureStatus = "OFF";
-    expect(parseDepartureTimes(off).every((d) => !d.enabled)).toBe(true);
+    expect(parseDepartureTimes(off)?.every((d) => !d.enabled)).toBe(true);
   });
 
-  it("liefert eine leere Liste, wenn Ford keine Abfahrtszeiten schickt", () => {
-    expect(parseDepartureTimes({ odometer: { value: 1 } })).toEqual([]);
-    expect(parseDepartureTimes(undefined)).toEqual([]);
+  it("liefert null, wenn Ford keine Abfahrtszeiten schickt", () => {
+    expect(parseDepartureTimes({ odometer: { value: 1 } })).toBeNull();
+    expect(parseDepartureTimes(undefined)).toBeNull();
+  });
+
+  it("liefert eine leere Liste, wenn keine Abfahrtszeit eingestellt ist", () => {
+    const empty = { configurations: { xevDepartureSchedulesSetting: { value: { departureLocations: [] } } } };
+    expect(parseDepartureTimes(empty)).toEqual([]);
   });
 
   it("zählt eine geänderte Abfahrtszeit als neuen Messwert", () => {
