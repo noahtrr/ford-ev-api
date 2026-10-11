@@ -95,28 +95,33 @@ export function parseDepartureTimes(metrics: unknown): DepartureTime[] | null {
   };
   type Setting = {
     departureScheduleFeatureStatus?: string;
+    departureSchedules?: Schedule[];
     departureLocations?: { departureSchedules?: Schedule[] }[];
   };
   const configurations = (metrics as Metrics | undefined)?.configurations as Metrics | undefined;
   const setting = value(configurations ?? {}, "xevDepartureSchedulesSetting") as Setting | null;
-  if (!setting || !Array.isArray(setting.departureLocations)) return null;
+  if (!setting || (!Array.isArray(setting.departureLocations) && !Array.isArray(setting.departureSchedules))) {
+    return null;
+  }
+  // Laut Ford-Doku liegen die Zeiten je Ort (departureLocations) oder direkt in departureSchedules.
+  // Die Liste je Ort hat Vorrang, damit keine Zeit doppelt erscheint, falls Ford beides schickt.
+  const perLocation = (setting.departureLocations ?? []).flatMap((location) => location?.departureSchedules ?? []);
+  const schedules = perLocation.length > 0 ? perLocation : (setting.departureSchedules ?? []);
 
   // Ist die Funktion im Auto ganz ausgeschaltet, gilt keine einzelne Zeit.
   const featureOn = str(setting.departureScheduleFeatureStatus)?.toUpperCase() !== "OFF";
   const departures: DepartureTime[] = [];
-  for (const location of setting.departureLocations) {
-    for (const entry of location?.departureSchedules ?? []) {
-      const day = str(entry?.schedule?.weeklySchedule?.dayOfWeek)?.toUpperCase();
-      const time = str(entry?.schedule?.weeklySchedule?.timeOfDay);
-      if (!day || !DAYS.includes(day) || !time || !/^\d{1,2}:\d{2}$/.test(time)) continue;
-      const precondition = str(entry.oemData?.chrg_go_t_prcond_d_stat?.stringValue)?.toUpperCase();
-      departures.push({
-        day,
-        time: time.padStart(5, "0"),
-        enabled: featureOn && str(entry.scheduleStatus)?.toUpperCase() === "ON",
-        preconditioning: precondition === undefined ? null : precondition === "ON",
-      });
-    }
+  for (const entry of schedules) {
+    const day = str(entry?.schedule?.weeklySchedule?.dayOfWeek)?.toUpperCase();
+    const time = str(entry?.schedule?.weeklySchedule?.timeOfDay);
+    if (!day || !DAYS.includes(day) || !time || !/^\d{1,2}:\d{2}$/.test(time)) continue;
+    const precondition = str(entry.oemData?.chrg_go_t_prcond_d_stat?.stringValue)?.toUpperCase();
+    departures.push({
+      day,
+      time: time.padStart(5, "0"),
+      enabled: featureOn && str(entry.scheduleStatus)?.toUpperCase() === "ON",
+      preconditioning: precondition === undefined ? null : precondition === "ON",
+    });
   }
   return departures.sort((a, b) => DAYS.indexOf(a.day) - DAYS.indexOf(b.day) || a.time.localeCompare(b.time));
 }
@@ -171,13 +176,16 @@ function parseDoors(metrics: Metrics): Opening[] | null {
       open: v === "CLOSED" ? false : v === "OPEN" || v === "AJAR" ? true : null,
     });
   }
+  // Laut Ford-Doku gibt es für die Motorhaube nur CLOSED (zu) und AJAR (offen).
   const hood = str(value(metrics, "hoodStatus"))?.toUpperCase();
-  if (hood) doors.push({ name: "Motorhaube", open: hood === "CLOSED" ? false : hood === "OPEN" ? true : null });
+  if (hood) {
+    doors.push({ name: "Motorhaube", open: hood === "CLOSED" ? false : hood === "OPEN" || hood === "AJAR" ? true : null });
+  }
   return doors.length > 0 ? doors : null;
 }
 
 /**
- * Fenster. Ford schickt meist einen Bereich (doubleRange), wie weit das Fenster offen ist:
+ * Fenster. Ford schickt meist einen Bereich (doubleRange oder intRange), wie weit das Fenster offen ist:
  * 0 bis 0 heißt geschlossen. Manche Modelle schicken stattdessen Text wie "FULLY_CLOSED".
  */
 function parseWindows(metrics: Metrics): Opening[] | null {
@@ -186,7 +194,10 @@ function parseWindows(metrics: Metrics): Opening[] | null {
     const position = str(w.vehicleWindow);
     if (!position) continue;
     let open: boolean | null = null;
-    const range = (w.value as { doubleRange?: { lowerBound?: unknown; upperBound?: unknown } } | null)?.doubleRange;
+    type Bounds = { lowerBound?: unknown; upperBound?: unknown };
+    const rangeValue = w.value as { doubleRange?: Bounds; intRange?: Bounds } | null;
+    // Laut Ford-Doku ist der Bereich entweder eine Kommazahl (doubleRange) oder eine Ganzzahl (intRange).
+    const range = rangeValue?.doubleRange ?? rangeValue?.intRange;
     const text = str(w.value)?.toUpperCase();
     if (range) {
       const lower = num(range.lowerBound) ?? 0;
