@@ -15,6 +15,8 @@ export interface Config {
   pollIntervalMinutes: number;
   /** Wohin nach dem Login weitergeleitet wird. Im Entwicklungsmodus die Vite-Adresse. */
   frontendUrl: string;
+  /** Zeitzone für Tage, Wochen und Monate in der Kilometerstand-Übersicht. */
+  timeZone: string;
   ford: {
     clientId: string;
     clientSecret: string;
@@ -32,6 +34,7 @@ export function loadConfig(): Config {
     // Ford erlaubt etwa eine Anfrage pro Minute, daher nicht unter 2 Minuten gehen.
     pollIntervalMinutes: Math.max(2, Number(process.env.POLL_INTERVAL_MINUTES ?? 5)),
     frontendUrl: process.env.FRONTEND_URL ?? "/",
+    timeZone: process.env.TIME_ZONE ?? "Europe/Berlin",
     ford: {
       clientId: required("FORD_CLIENT_ID"),
       clientSecret: required("FORD_CLIENT_SECRET"),

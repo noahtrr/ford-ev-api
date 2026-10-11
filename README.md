@@ -22,6 +22,8 @@ Wichtige Dateien im Backend:
 - `src/ford/client.ts` – Abfragen an die Ford-API
 - `src/ford/telemetry.ts` – macht aus Fords Antwort einfache Werte
 - `src/poller.ts` – fragt regelmäßig ab und speichert neue Werte
+- `src/odometer.ts` – Kilometerstand nach Tagen/Wochen/Monaten/Jahren, Jahresübersicht und Export
+- `src/xlsx.ts` – schreibt Excel-Dateien ohne zusätzliches Paket
 - `src/server.ts` – Webadressen (`/login`, `/api/...`)
 
 ## Einrichtung im Ford-Portal
@@ -97,4 +99,7 @@ npm run build     # Produktions-Build
 | `GET /api/status` | ob schon eingeloggt |
 | `GET /api/vehicles` | deine Fahrzeuge (direkt von Ford) |
 | `GET /api/snapshots/latest` | neueste gespeicherte Werte je Fahrzeug |
+| `GET /api/odometer?period=day` | Kilometerstand nach Tagen (`week`, `month`, `year`) |
+| `GET /api/odometer/year?year=2026` | Jahresübersicht mit 12 Monaten |
+| `GET /api/odometer/year/export?year=2026&format=csv` | Jahresübersicht als Datei (`csv`, `txt`, `xlsx`) |
 | `GET /api/health` | Lebenszeichen für Docker/Monitoring |
