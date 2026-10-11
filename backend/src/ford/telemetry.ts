@@ -23,7 +23,8 @@ export interface VehicleSnapshot {
   lon: number | null;
   plugStatus: string | null;
   chargeStatus: string | null;
-  departures: DepartureTime[];
+  /** null = Ford schickt für dieses Auto keine Abfahrtszeiten mit. */
+  departures: DepartureTime[] | null;
   raw: unknown;
 }
 
@@ -64,9 +65,10 @@ const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"
 /**
  * Liest die Abfahrtszeiten aus der Telemetrie. Ford schickt sie unter
  * metrics.configurations.xevDepartureSchedulesSetting mit, eine extra Abfrage ist nicht nötig.
- * Sortiert nach Wochentag und Uhrzeit.
+ * Sortiert nach Wochentag und Uhrzeit. Gibt null zurück, wenn Ford gar keine Abfahrtszeiten
+ * mitschickt (nicht jedes Modell liefert sie), und eine leere Liste, wenn keine eingestellt ist.
  */
-export function parseDepartureTimes(metrics: unknown): DepartureTime[] {
+export function parseDepartureTimes(metrics: unknown): DepartureTime[] | null {
   type Schedule = {
     scheduleStatus?: string;
     schedule?: { weeklySchedule?: { dayOfWeek?: string; timeOfDay?: string } };
@@ -78,7 +80,7 @@ export function parseDepartureTimes(metrics: unknown): DepartureTime[] {
   };
   const configurations = (metrics as Metrics | undefined)?.configurations as Metrics | undefined;
   const setting = value(configurations ?? {}, "xevDepartureSchedulesSetting") as Setting | null;
-  if (!setting || !Array.isArray(setting.departureLocations)) return [];
+  if (!setting || !Array.isArray(setting.departureLocations)) return null;
 
   // Ist die Funktion im Auto ganz ausgeschaltet, gilt keine einzelne Zeit.
   const featureOn = str(setting.departureScheduleFeatureStatus)?.toUpperCase() !== "OFF";

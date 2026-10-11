@@ -15,7 +15,7 @@ interface Snapshot {
   odometerKm: number | null;
   plugStatus: string | null;
   chargeStatus: string | null;
-  departures: Departure[];
+  departures: Departure[] | null;
 }
 
 const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
@@ -38,7 +38,15 @@ function nextDeparture(departures: Departure[], now = new Date()): Departure | u
     .reduce<Departure | undefined>((best, d) => (!best || until(d) < until(best) ? d : best), undefined);
 }
 
-function Departures({ departures }: { departures: Departure[] }) {
+function Departures({ departures }: { departures: Departure[] | null }) {
+  if (departures === null) {
+    return (
+      <div className="departures">
+        <h3>Abfahrtszeiten</h3>
+        <p>Ford liefert für dieses Auto keine Abfahrtszeiten.</p>
+      </div>
+    );
+  }
   const active = departures.filter((d) => d.enabled);
   const next = nextDeparture(departures);
   return (
@@ -117,7 +125,7 @@ export function App() {
             <dt>Ladestatus</dt>
             <dd>{show(s.chargeStatus)}</dd>
           </dl>
-          <Departures departures={s.departures ?? []} />
+          <Departures departures={s.departures ?? null} />
           <small>Stand: {new Date(s.ts).toLocaleString("de-DE")}</small>
         </section>
       ))}
