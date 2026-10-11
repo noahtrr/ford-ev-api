@@ -235,23 +235,6 @@ function Departures({ departures }: { departures: Departure[] | null }) {
   );
 }
 
-/** Ausklappbare Swagger-Übersicht der eigenen API. Lädt erst beim ersten Aufklappen. */
-function ApiDocs() {
-  const [opened, setOpened] = useState(false);
-  return (
-    <details className="api-docs" onToggle={(e) => e.currentTarget.open && setOpened(true)}>
-      <summary>API-Endpunkte (Swagger)</summary>
-      <p>
-        Alle Endpunkte, die diese App anbietet. Mit „Try it out“ kannst du sie direkt ausprobieren.{" "}
-        <a href="/api/docs" target="_blank" rel="noopener noreferrer">
-          In neuem Tab öffnen
-        </a>
-      </p>
-      {opened && <iframe src="/api/docs" title="Swagger-Übersicht der API" />}
-    </details>
-  );
-}
-
 function show(value: number | string | null, unit = ""): string {
   return value === null ? "–" : `${value}${unit}`;
 }
@@ -287,7 +270,6 @@ function OverviewPage() {
         <a className="button" href="/login">
           Mit Ford anmelden
         </a>
-        <ApiDocs />
       </>
     );
   }
@@ -321,7 +303,6 @@ function OverviewPage() {
           </section>
         );
       })}
-      <ApiDocs />
     </>
   );
 }
