@@ -372,14 +372,37 @@ function Header({ path }: { path: string }) {
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
-  const loadMe = () => void originalFetch("/api/auth/me").then(async (r) => setMe(await r.json()));
+  // Ohne Internet (z. B. die installierte App im Funkloch) kommt der Server nicht an.
+  const [offline, setOffline] = useState(false);
+  const loadMe = () =>
+    void originalFetch("/api/auth/me")
+      .then(async (r) => {
+        setMe(await r.json());
+        setOffline(false);
+      })
+      .catch(() => setOffline(true));
   useEffect(() => {
     loadMe();
+    window.addEventListener("online", loadMe);
     const onLoggedOut = () => setMe((m) => (m && m.loginRequired ? { ...m, loggedIn: false } : m));
     window.addEventListener(LOGGED_OUT, onLoggedOut);
-    return () => window.removeEventListener(LOGGED_OUT, onLoggedOut);
+    return () => {
+      window.removeEventListener("online", loadMe);
+      window.removeEventListener(LOGGED_OUT, onLoggedOut);
+    };
   }, []);
 
+  if (me === null && offline) {
+    return (
+      <main>
+        <h1>Mein Ford</h1>
+        <p>Keine Verbindung zum Server. Prüfe dein Internet und versuche es noch einmal.</p>
+        <button type="button" className="button" onClick={loadMe}>
+          Erneut versuchen
+        </button>
+      </main>
+    );
+  }
   if (me === null) return <main>Lade…</main>;
   if (me.loginRequired && !me.loggedIn) return <LoginPage setupMissing={me.setupMissing} onLoggedIn={loadMe} />;
   return <LoggedInApp />;
