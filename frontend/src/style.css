@@ -538,3 +538,84 @@ button.link {
 button.link.danger {
   color: #c0392b;
 }
+
+/* Reiter oben auf einer Seite (Anzeige / Export) */
+.page-tabs {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  margin-bottom: 0.5rem;
+  border-radius: 0.6rem;
+  background: #8882;
+}
+.page-tabs a {
+  padding: 0.4rem 1.1rem;
+  border-radius: 0.45rem;
+  color: inherit;
+  text-decoration: none;
+}
+.page-tabs a.active {
+  background: #1f4e9c;
+  color: white;
+  font-weight: 600;
+}
+h2 {
+  font-size: 1.2rem;
+}
+
+/* Ladevorgänge */
+.bar.charge {
+  background: #2e8b57;
+}
+.session {
+  border: 1px solid #8884;
+  border-left: 4px solid #8886;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  margin: 0.4rem 0 0.6rem;
+  font-size: 0.85rem;
+}
+.session.private {
+  border-left-color: #2e8b57;
+}
+.session.business {
+  border-left-color: #1f4e9c;
+}
+.session-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.95rem;
+}
+.session-soc {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.6rem;
+  margin: 0.4rem 0;
+}
+.soc-bar {
+  display: flex;
+  width: 9rem;
+  height: 0.6rem;
+  border-radius: 0.3rem;
+  background: #8883;
+  overflow: hidden;
+}
+.soc-before {
+  background: #8888;
+}
+.soc-added {
+  background: #2e8b57;
+}
+.session-facts {
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0.4rem 0 0.6rem;
+}
+.session-facts dt {
+  opacity: 0.7;
+}
+.session-facts dd {
+  margin: 0;
+}

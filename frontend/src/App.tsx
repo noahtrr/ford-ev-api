@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { LOGGED_OUT, LoginPage, ProfilePage, type Me } from "./Account";
-import { OdometerHistoryPage, YearOverviewPage } from "./Odometer";
+import { ChargingPage } from "./Charging";
+import { OdometerPage } from "./Odometer";
 
 // Antwortet das Backend mit 401, ist die Anmeldung abgelaufen: dann zur Anmeldeseite.
 const originalFetch = window.fetch.bind(window);
@@ -316,16 +317,29 @@ function OverviewPage() {
   );
 }
 
-/** Die Seiten der App. Die Adresse steht hinter dem # (z. B. /#/kilometerstand), so braucht der Server nichts extra. */
-const PAGES = [
+/**
+ * Die Seiten der App. Die Adresse steht hinter dem # (z. B. /#/kilometerstand), so braucht der Server nichts extra.
+ * Was nach der Seite kommt, ist der Reiter auf der Seite (z. B. /#/kilometerstand/export).
+ */
+const PAGES: { path: string; label: string; page: (props: { sub: string }) => ReactNode }[] = [
   { path: "#/", label: "Übersicht", page: OverviewPage },
-  { path: "#/kilometerstand", label: "Kilometerstand", page: OdometerHistoryPage },
-  { path: "#/jahresuebersicht", label: "Jahresübersicht", page: YearOverviewPage },
+  { path: "#/kilometerstand", label: "Kilometerstand", page: OdometerPage },
+  { path: "#/ladevorgaenge", label: "Ladevorgänge", page: ChargingPage },
   { path: "#/profil", label: "Profil", page: ProfilePage },
 ];
 
-function currentPath(): string {
-  return PAGES.some((p) => p.path === window.location.hash) ? window.location.hash : "#/";
+/** Alte Adressen, die es nicht mehr gibt, z. B. aus Lesezeichen. */
+const REDIRECTS: Record<string, string> = { "#/jahresuebersicht": "#/kilometerstand/export" };
+
+/** Seite und Reiter aus der Adresse. */
+function currentRoute(): { path: string; sub: string } {
+  const hash = REDIRECTS[window.location.hash] ?? window.location.hash;
+  for (const p of PAGES) {
+    if (p.path === "#/") continue;
+    if (hash === p.path) return { path: p.path, sub: "" };
+    if (hash.startsWith(`${p.path}/`)) return { path: p.path, sub: hash.slice(p.path.length + 1) };
+  }
+  return { path: "#/", sub: "" };
 }
 
 /** Kopfzeile mit Hamburger-Menü. */
@@ -372,21 +386,22 @@ export function App() {
 }
 
 function LoggedInApp() {
-  const [path, setPath] = useState(currentPath);
+  const [route, setRoute] = useState(currentRoute);
   useEffect(() => {
+    if (REDIRECTS[window.location.hash]) window.location.replace(REDIRECTS[window.location.hash]);
     const onChange = () => {
-      setPath(currentPath());
+      setRoute(currentRoute());
       window.scrollTo(0, 0);
     };
     window.addEventListener("hashchange", onChange);
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
-  const Page = PAGES.find((p) => p.path === path)!.page;
+  const Page = PAGES.find((p) => p.path === route.path)!.page;
   return (
     <>
-      <Header path={path} />
+      <Header path={route.path} />
       <main>
-        <Page />
+        <Page sub={route.sub} />
       </main>
     </>
   );

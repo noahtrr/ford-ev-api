@@ -11,7 +11,17 @@ import { setupAuth } from "./auth/routes.js";
 import type { Store } from "./db.js";
 import { exchangeCode, loginUrl } from "./ford/auth.js";
 import type { FordClient } from "./ford/client.js";
-import { PERIODS, TRIP_CATEGORIES, dayReadings, summarize, toCsv, toTxt, toXlsx, yearOverview, type Period, type TripCategory } from "./odometer.js";
+import {
+  chargingMonthsTable,
+  chargingSessionsTable,
+  chargingYearOverview,
+  chargingYears,
+  daySessions,
+  detectSessions,
+  summarizeCharging,
+} from "./charging.js";
+import { EXPORT_FORMATS, type ExportFormat } from "./export.js";
+import { PERIODS, TRIP_CATEGORIES, dayReadings, overviewTable, summarize, yearOverview, type Period, type TripCategory } from "./odometer.js";
 import { pollOnce } from "./poller.js";
 
 export function buildServer(config: Config, store: Store, client: FordClient, publicDir?: string) {
@@ -35,6 +45,11 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
         { name: "Anmeldung", description: "Verbindung mit dem FordPass-Konto" },
         { name: "Fahrzeug", description: "Daten zu deinen Autos" },
         { name: "Kilometerstand", description: "Verlauf des Kilometerstands und Jahresübersicht zum Exportieren" },
+        {
+          name: "Ladevorgänge",
+          description:
+            "Ladevorgänge, abgeleitet aus den gespeicherten Messwerten (Ladestand, Kabel, Ladestatus), mit Verlauf, Jahresübersicht und Export",
+        },
       ],
     },
   });
@@ -242,35 +257,159 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
       },
     );
 
-    const exportFormats = {
-      csv: { type: "text/csv; charset=utf-8", build: toCsv },
-      txt: { type: "text/plain; charset=utf-8", build: toTxt },
-      xlsx: { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", build: toXlsx },
-    } as const;
+    const formatProperty = { type: "string", enum: Object.keys(EXPORT_FORMATS), default: "csv" };
 
-    app.get<{ Querystring: { vin?: string; year?: number; format: keyof typeof exportFormats } }>(
+    app.get<{ Querystring: { vin?: string; year?: number; format?: ExportFormat } }>(
       "/api/odometer/year/export",
       {
         schema: {
           tags: ["Kilometerstand"],
           summary: "Jahresübersicht als Datei herunterladen",
           description: "CSV (für Excel mit Semikolon), TXT (Texttabelle) oder XLSX (Excel).",
-          querystring: {
-            ...yearQuery,
-            properties: { ...yearQuery.properties, format: { type: "string", enum: Object.keys(exportFormats), default: "csv" } },
-          },
+          querystring: { ...yearQuery, properties: { ...yearQuery.properties, format: formatProperty } },
         },
       },
       async (req, reply) => {
         const vin = pickVin(req.query.vin);
         if (!vin) return reply.code(404).send({ error: "Noch keine Kilometerstände gespeichert." });
         const year = req.query.year ?? new Date().getFullYear();
-        const format = exportFormats[req.query.format ?? "csv"];
+        const name = req.query.format ?? "csv";
+        const format = EXPORT_FORMATS[name];
         const overview = yearOverview(vin, store.odometerReadings(vin), year, config.timeZone);
         return reply
           .type(format.type)
-          .header("content-disposition", `attachment; filename="kilometerstand-${year}.${req.query.format ?? "csv"}"`)
-          .send(format.build(overview, config.timeZone));
+          .header("content-disposition", `attachment; filename="kilometerstand-${year}.${name}"`)
+          .send(format.build(overviewTable(overview, config.timeZone)));
+      },
+    );
+
+    // ---- Ladevorgänge ----
+    const sessionsOf = (vin: string) => detectSessions(store.chargingSamples(vin));
+    const noData = { error: "Noch keine Messwerte gespeichert." };
+
+    app.get<{ Querystring: { vin?: string; period?: Period } }>(
+      "/api/charging",
+      {
+        schema: {
+          tags: ["Ladevorgänge"],
+          summary: "Ladevorgänge nach Tagen, Wochen, Monaten oder Jahren",
+          description:
+            "Je Zeitraum: Anzahl Ladevorgänge, geladene Prozent, Energie (nur wenn Ford Energie oder Akkukapazität schickt), gewonnene Reichweite und Ladedauer. Nur Zeiträume mit Ladevorgängen, neueste zuerst.",
+          querystring: {
+            type: "object",
+            properties: { vin: vinProperty, period: { type: "string", enum: PERIODS, default: "day" } },
+          },
+        },
+      },
+      async (req) => {
+        const vin = pickVin(req.query.vin);
+        const period = req.query.period ?? "day";
+        return { vin, vins: store.vins(), period, rows: vin ? summarizeCharging(sessionsOf(vin), period, config.timeZone) : [] };
+      },
+    );
+
+    app.get<{ Querystring: { vin?: string; date: string } }>(
+      "/api/charging/day",
+      {
+        schema: {
+          tags: ["Ladevorgänge"],
+          summary: "Alle Ladevorgänge eines Tages",
+          description:
+            "Für die aufgeklappte Tagesansicht: jeder Ladevorgang mit Beginn, Ende, Ladestand vorher und nachher, Reichweite, Ladeart, Ort und Markierung. Älteste zuerst.",
+          querystring: {
+            type: "object",
+            required: ["date"],
+            properties: { vin: vinProperty, date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Tag, z. B. 2026-10-11" } },
+          },
+        },
+      },
+      async (req) => {
+        const vin = pickVin(req.query.vin);
+        return { vin, date: req.query.date, sessions: vin ? daySessions(sessionsOf(vin), req.query.date, config.timeZone) : [] };
+      },
+    );
+
+    app.put<{ Body: { vin?: string; ids: string[]; category: TripCategory | null } }>(
+      "/api/charging/category",
+      {
+        schema: {
+          tags: ["Ladevorgänge"],
+          summary: "Ladevorgänge als privat oder geschäftlich markieren",
+          description: "ids = Feld id aus /api/charging/day. category null entfernt die Markierung.",
+          body: {
+            type: "object",
+            required: ["ids", "category"],
+            properties: {
+              vin: vinProperty,
+              ids: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5000 },
+              category: { type: ["string", "null"], enum: [...TRIP_CATEGORIES, null] },
+            },
+          },
+        },
+      },
+      async (req, reply) => {
+        const vin = pickVin(req.body.vin);
+        if (!vin) return reply.code(404).send(noData);
+        return { updated: store.setChargingCategory(vin, req.body.ids, req.body.category) };
+      },
+    );
+
+    app.get<{ Querystring: { vin?: string; year?: number } }>(
+      "/api/charging/year",
+      {
+        schema: {
+          tags: ["Ladevorgänge"],
+          summary: "Jahresübersicht der Ladevorgänge mit allen 12 Monaten",
+          querystring: yearQuery,
+        },
+      },
+      async (req, reply) => {
+        const vin = pickVin(req.query.vin);
+        if (!vin) return reply.code(404).send(noData);
+        const year = req.query.year ?? new Date().getFullYear();
+        const sessions = sessionsOf(vin);
+        return {
+          ...chargingYearOverview(vin, sessions, year, config.timeZone),
+          years: chargingYears(sessions, config.timeZone),
+          vins: store.vins(),
+        };
+      },
+    );
+
+    app.get<{ Querystring: { vin?: string; year?: number; format?: ExportFormat; type?: "months" | "sessions" } }>(
+      "/api/charging/year/export",
+      {
+        schema: {
+          tags: ["Ladevorgänge"],
+          summary: "Ladevorgänge eines Jahres als Datei herunterladen",
+          description:
+            "type=months: Monatsübersicht. type=sessions: jeder einzelne Ladevorgang. Als CSV (für Excel mit Semikolon), TXT (Texttabelle) oder XLSX (Excel).",
+          querystring: {
+            ...yearQuery,
+            properties: {
+              ...yearQuery.properties,
+              format: formatProperty,
+              type: { type: "string", enum: ["months", "sessions"], default: "months" },
+            },
+          },
+        },
+      },
+      async (req, reply) => {
+        const vin = pickVin(req.query.vin);
+        if (!vin) return reply.code(404).send(noData);
+        const year = req.query.year ?? new Date().getFullYear();
+        const name = req.query.format ?? "csv";
+        const type = req.query.type ?? "months";
+        const sessions = sessionsOf(vin);
+        const table =
+          type === "sessions"
+            ? chargingSessionsTable(vin, year, sessions, config.timeZone)
+            : chargingMonthsTable(chargingYearOverview(vin, sessions, year, config.timeZone));
+        const file = type === "sessions" ? `ladevorgaenge-einzeln-${year}` : `ladevorgaenge-${year}`;
+        return reply
+          .type(EXPORT_FORMATS[name].type)
+          .header("content-disposition", `attachment; filename="${file}.${name}"`)
+          .send(EXPORT_FORMATS[name].build(table));
       },
     );
   });

@@ -160,4 +160,43 @@ describe("server", () => {
     const res = await setup().inject("/api/odometer/year");
     expect(res.statusCode).toBe(404);
   });
+
+  it("leitet Ladevorgänge aus den Messwerten ab, markiert und exportiert sie", async () => {
+    const app = setup((store) => {
+      const charge = (ts: string, soc: number, plug: string, status: string) =>
+        store.saveSnapshot(
+          parseTelemetry({
+            vin: "V1",
+            metrics: {
+              xevBatteryStateOfCharge: { value: soc, updateTime: ts },
+              xevPlugChargerStatus: { value: plug, updateTime: ts },
+              xevBatteryChargeDisplayStatus: { value: status, updateTime: ts, xevChargerPowerType: "AC" },
+              xevBatteryCapacity: { value: 70, updateTime: ts },
+            },
+          })[0],
+        );
+      charge("2026-01-10T16:00:00Z", 30, "CONNECTED", "IN_PROGRESS");
+      charge("2026-01-10T18:00:00Z", 60, "CONNECTED", "IN_PROGRESS");
+      charge("2026-01-10T19:00:00Z", 80, "CONNECTED", "COMPLETED");
+      charge("2026-01-10T20:00:00Z", 80, "DISCONNECTED", "NOT_PLUGGED_IN");
+    });
+    const day = await app.inject("/api/charging/day?date=2026-01-10");
+    const sessions = day.json().sessions;
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({ startSocPct: 30, endSocPct: 80, energyKwh: 35, powerType: "AC", durationMin: 180, category: null });
+
+    const put = await app.inject({ method: "PUT", url: "/api/charging/category", payload: { ids: [sessions[0].id], category: "business" } });
+    expect(put.json()).toEqual({ updated: 1 });
+    const months = await app.inject("/api/charging?period=month");
+    expect(months.json().rows[0]).toMatchObject({ period: "2026-01", sessions: 1, businessSessions: 1, businessKwh: 35 });
+
+    const year = await app.inject("/api/charging/year?year=2026");
+    expect(year.json().total).toMatchObject({ sessions: 1, energyKwh: 35 });
+
+    const csv = await app.inject("/api/charging/year/export?year=2026&format=csv&type=sessions");
+    expect(csv.headers["content-disposition"]).toContain("ladevorgaenge-einzeln-2026.csv");
+    expect(csv.body).toContain("10.01.2026;17:00;20:00;3:00 h;30;80;50;35;11,7");
+    const xlsx = await app.inject("/api/charging/year/export?year=2026&format=xlsx");
+    expect(xlsx.rawPayload.subarray(0, 2).toString()).toBe("PK");
+  });
 });

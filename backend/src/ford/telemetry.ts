@@ -275,3 +275,31 @@ export function parseTelemetry(data: unknown, now = new Date()): VehicleSnapshot
   }
   return snapshots;
 }
+
+/** Zusätzliche Lade-Werte, die nicht jedes Modell schickt. null = Ford schickt den Wert nicht. */
+export interface ChargingDetails {
+  /** AC, DC oder WIRELESS. */
+  powerType: string | null;
+  /** Minuten bis der Akku voll ist. */
+  timeToFullMin: number | null;
+  /** Energie im Akku in kWh. */
+  energyRemainingKwh: number | null;
+  /** Nutzbare Akkukapazität in kWh. */
+  capacityKwh: number | null;
+}
+
+/** Liest Ladeart, Zeit bis voll und Energie aus den Messwerten (für die Ladevorgänge). */
+export function parseChargingDetails(metrics: unknown): ChargingDetails {
+  const m = (metrics ?? {}) as Metrics;
+  // Die Ladeart hängt laut Ford-Doku als Zusatzfeld am Ladestatus, manche Modelle schicken
+  // stattdessen die Art der Ladesäule (AC_BASIC, AC_SMART, DC_FAST, WIRELESS).
+  const status = entries(m, "xevBatteryChargeDisplayStatus")[0];
+  const station = str(value(m, "xevChargeStationPowerType"))?.toUpperCase();
+  const fromStation = station?.startsWith("DC") ? "DC" : station?.startsWith("AC") ? "AC" : station === "WIRELESS" ? "WIRELESS" : null;
+  return {
+    powerType: str(status?.xevChargerPowerType)?.toUpperCase() ?? fromStation,
+    timeToFullMin: num(value(m, "xevBatteryTimeToFullCharge")),
+    energyRemainingKwh: num(value(m, "xevBatteryEnergyRemaining")),
+    capacityKwh: num(value(m, "xevBatteryCapacity")),
+  };
+}
