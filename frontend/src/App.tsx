@@ -155,38 +155,58 @@ function AlarmTile({ alarm }: { alarm: string | null }) {
   return <Tile title="Alarmanlage" value={text} tone={tone} />;
 }
 
-/** Ein einfaches gezeichnetes Auto, wenn Ford kein Bild liefert. */
-function CarDrawing() {
+/** Ein gezeichneter Ford Explorer von der Seite. Beim Laden steht er an einer Ladesäule und Strom fließt ins Auto. */
+function CarDrawing({ charging }: { charging: boolean }) {
   return (
-    <svg viewBox="0 0 240 90" className="car-drawing" aria-hidden="true">
+    <svg viewBox="0 0 320 112" className={`car-drawing${charging ? " charging" : ""}`} aria-hidden="true">
+      <ellipse cx="146" cy="101" rx="130" ry="5" className="shadow" />
+      {/* Karosserie: kurze Haube, steile Front, flaches Dach, steiles Heck */}
       <path
-        d="M14 62 C14 52 20 48 34 46 L62 42 C76 28 92 20 120 20 C146 20 162 28 180 42 L206 46 C222 49 228 54 228 62 L228 68 L14 68 Z"
-        fill="currentColor"
-        opacity="0.18"
+        className="body"
+        d="M18 90 L17 74 C17 68 21 64 30 62 L84 54 L112 32 C115 29 119 28 124 28 L232 27 C238 27 242 29 245 33 L262 52 C266 55 268 60 268 66 L269 90 Z"
       />
-      <path d="M70 42 C82 30 96 26 118 26 L118 42 Z M126 26 C146 26 158 32 170 42 L126 42 Z" fill="currentColor" opacity="0.35" />
-      <circle cx="62" cy="68" r="14" fill="currentColor" opacity="0.6" />
-      <circle cx="182" cy="68" r="14" fill="currentColor" opacity="0.6" />
-      <circle cx="62" cy="68" r="6" fill="currentColor" opacity="0.25" />
-      <circle cx="182" cy="68" r="6" fill="currentColor" opacity="0.25" />
+      {/* Fenster mit schwarzen Säulen, wie beim Explorer */}
+      <path className="glass" d="M92 54 L116 35 C118 33 121 32 124 32 L230 31 C235 31 238 33 240 36 L252 54 Z" />
+      <path className="pillar" d="M150 32 L148 54 M196 31 L198 54" />
+      <path className="trim" d="M30 70 L262 66" />
+      <path className="headlight" d="M20 68 L42 64" />
+      <path className="taillight" d="M264 60 L265 70" />
+      {/* Radhäuser und Räder */}
+      <circle cx="70" cy="90" r="21" className="arch" />
+      <circle cx="222" cy="90" r="21" className="arch" />
+      <circle cx="70" cy="90" r="16" className="tire" />
+      <circle cx="222" cy="90" r="16" className="tire" />
+      <circle cx="70" cy="90" r="8" className="rim" />
+      <circle cx="222" cy="90" r="8" className="rim" />
+      {/* Ladeklappe hinten an der Seite */}
+      <rect x="244" y="57" width="10" height="8" rx="2" className="port" />
+      {charging && (
+        <g className="charger">
+          <rect x="286" y="34" width="22" height="70" rx="4" className="post" />
+          <rect x="290" y="40" width="14" height="14" rx="2" className="screen" />
+          <path d="M298 42 L294 48 L298 48 L296 53 L301 46 L297 46 Z" className="bolt" />
+          <path d="M290 70 C280 104 254 96 250 64" className="cable" />
+          <path d="M290 70 C280 104 254 96 250 64" className="current" />
+        </g>
+      )}
     </svg>
   );
 }
 
-/** Bild oben auf der Karte: das Foto von Ford, wenn es eins gibt, sonst eine Zeichnung. */
-function VehicleImage({ info, fetched }: { info: VehicleInfo | undefined; fetched: boolean }) {
+const isCharging = (s: Snapshot) => ["IN_PROGRESS", "FAST_CHARGING"].includes(s.chargeStatus?.toUpperCase() ?? "");
+
+/** Bild oben auf der Karte: beim Laden die Ladeanimation, sonst das Foto von Ford oder die Zeichnung. */
+function VehicleImage({ info, charging }: { info: VehicleInfo | undefined; charging: boolean }) {
   const [broken, setBroken] = useState(false);
   const name = [info?.model, info?.year].filter(Boolean).join(" ");
   return (
     <figure className="vehicle-image">
-      {info?.imageUrl && !broken ? (
+      {info?.imageUrl && !broken && !charging ? (
         <img src={info.imageUrl} alt={name || "Mein Auto"} onError={() => setBroken(true)} />
       ) : (
         <>
-          <CarDrawing />
-          <figcaption>
-            {fetched ? "Ford liefert über die API kein Fahrzeugbild." : "Fahrzeugdaten werden noch bei Ford abgefragt."}
-          </figcaption>
+          <CarDrawing charging={charging} />
+          {charging && <figcaption>Lädt gerade</figcaption>}
         </>
       )}
     </figure>
@@ -293,7 +313,7 @@ function OverviewPage() {
         const name = [info?.model, info?.year].filter(Boolean).join(" ");
         return (
           <section key={s.vin} className="card">
-            <VehicleImage info={info} fetched={vehicleInfo !== null} />
+            <VehicleImage info={info} charging={isCharging(s)} />
             <h2>{name || s.vin}</h2>
             {name && <p className="vin">{s.vin}</p>}
             <div className="hero-stats">
