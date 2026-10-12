@@ -23,6 +23,8 @@ import { hashPassword, verifyPassword } from "./passwords.js";
 const COOKIE = "sid";
 const SESSION_DAYS = 30;
 const CHALLENGE_MINUTES = 5;
+// Höchstens so viele offene Challenges merken, damit niemand den Speicher volllaufen lassen kann.
+const MAX_CHALLENGES = 1000;
 const MIN_PASSWORD_LENGTH = 8;
 // Nach 5 falschen Passwörtern ist der Login für diese IP-Adresse 15 Minuten gesperrt.
 const MAX_FAILED_LOGINS = 5;
@@ -79,6 +81,11 @@ export function setupAuth(app: FastifyInstance, config: Config, store: Store): (
   const rememberChallenge = (challenge: string, kind: "login" | "register") => {
     const now = Date.now();
     for (const [c, v] of challenges) if (v.expires < now) challenges.delete(c);
+    // Die ältesten zuerst verwerfen (eine Map behält die Reihenfolge, in der etwas dazukam).
+    for (const c of challenges.keys()) {
+      if (challenges.size < MAX_CHALLENGES) break;
+      challenges.delete(c);
+    }
     challenges.set(challenge, { kind, expires: now + CHALLENGE_MINUTES * 60_000 });
   };
   /** Prüft und verbraucht eine Challenge, damit sie nicht zweimal benutzt werden kann. */

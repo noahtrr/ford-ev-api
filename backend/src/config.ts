@@ -23,7 +23,7 @@ export interface Config {
     username: string | null;
     /** Passwort-Hash aus der Server-Einrichtung (bcrypt von Caddy oder scrypt). */
     passwordHash: string | null;
-    /** Adresse der App ohne https://, z. B. ford.zenvmc.de. Passkeys gehören immer zu genau dieser Adresse. */
+    /** Adresse der App ohne https://, z. B. ford.example.de. Passkeys gehören immer zu genau dieser Adresse. */
     domain: string | null;
     /** true = ohne eingerichteten Login ist alles gesperrt (Server). false = alles offen (Entwicklung am eigenen Rechner). */
     lockWithoutLogin: boolean;

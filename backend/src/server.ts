@@ -29,7 +29,9 @@ import { pollOnce } from "./poller.js";
 /** lookupAddress: schlägt Adressen zu Ladeorten nach. Ohne bleibt die Adresse leer (z. B. in Tests). */
 export function buildServer(config: Config, store: Store, client: FordClient, publicDir?: string, lookupAddress?: AddressLookup) {
   // trustProxy: die App steht hinter Caddy, das die echte IP und "https" in X-Forwarded-* mitschickt.
-  const app = Fastify({ logger: true, trustProxy: true });
+  // Nur Absendern aus dem eigenen Rechner oder internen Netz (z. B. Caddy im Docker-Netz) glauben,
+  // sonst könnte jeder aus dem Internet eine falsche IP mitschicken und die Login-Sperre umgehen.
+  const app = Fastify({ logger: true, trustProxy: ["loopback", "uniquelocal"] });
   // Schützt den Login vor fremden Rückleitungen (CSRF).
   const pendingStates = new Set<string>();
 

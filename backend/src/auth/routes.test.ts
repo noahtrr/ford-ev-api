@@ -151,6 +151,37 @@ describe("Login", () => {
     expect((await attempt("noah", "geheim123")).statusCode).toBe(429);
   });
 
+  it("lässt sich die Sperre nicht mit einer gefälschten IP im X-Forwarded-For umgehen", async () => {
+    const { app } = await setup();
+    // Direkt aus dem Internet (nicht über Caddy), jedes Mal mit einer anderen angeblichen IP.
+    const attempt = (i: number, password: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        remoteAddress: "203.0.113.7",
+        headers: { "x-forwarded-for": `198.51.100.${i}` },
+        payload: { username: "noah", password },
+      });
+    for (let i = 0; i < 5; i++) expect((await attempt(i, "falsch")).statusCode).toBe(401);
+    expect((await attempt(99, "geheim123")).statusCode).toBe(429);
+  });
+
+  it("glaubt Caddy im internen Netz die echte IP des Browsers", async () => {
+    const { app } = await setup();
+    const attempt = (ip: string, password: string) =>
+      app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        remoteAddress: "172.18.0.3",
+        headers: { "x-forwarded-for": ip },
+        payload: { username: "noah", password },
+      });
+    for (let i = 0; i < 5; i++) expect((await attempt("203.0.113.7", "falsch")).statusCode).toBe(401);
+    expect((await attempt("203.0.113.7", "geheim123")).statusCode).toBe(429);
+    // Ein anderer Browser ist nicht mitgesperrt.
+    expect((await attempt("203.0.113.8", "geheim123")).statusCode).toBe(200);
+  });
+
   it("sperrt auf dem Server alles, wenn der Login nicht eingerichtet ist", async () => {
     const { app } = await setup({ username: null, passwordHash: null });
     expect((await app.inject("/api/status")).statusCode).toBe(503);
