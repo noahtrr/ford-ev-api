@@ -131,26 +131,23 @@ function DayDetails({ vin, date, onChanged }: { vin: string | null; date: string
   };
 
   if (readings === null) return <p className="hint">Lade…</p>;
-  // Nur Strecken, auf denen das Auto wirklich gefahren ist, lassen sich sinnvoll markieren.
-  const driven = readings.filter((r) => r.distanceKm > 0 || r.category !== null);
+  if (readings.length === 0) return <p className="hint">An diesem Tag hat Ford keine neuen Kilometer gemeldet.</p>;
   const time = (ts: string) => new Date(ts).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 
   return (
     <div className="day-details">
-      {driven.length > 0 && (
-        <div className="day-actions">
+      <div className="day-actions">
           <span>Ganzen Tag markieren:</span>
-          <button className="chip private" onClick={() => void mark(driven.map((r) => r.id), "private")}>
+          <button className="chip private" onClick={() => void mark(readings.map((r) => r.id), "private")}>
             Privat
           </button>
-          <button className="chip business" onClick={() => void mark(driven.map((r) => r.id), "business")}>
+          <button className="chip business" onClick={() => void mark(readings.map((r) => r.id), "business")}>
             Geschäftlich
           </button>
-          <button className="chip" onClick={() => void mark(driven.filter((r) => r.category).map((r) => r.id), null)}>
-            Zurücksetzen
-          </button>
-        </div>
-      )}
+          <button className="chip" onClick={() => void mark(readings.filter((r) => r.category).map((r) => r.id), null)}>
+          Zurücksetzen
+        </button>
+      </div>
       {error && <p className="message error">{error}</p>}
       <table className="km-table readings">
         <thead>
@@ -166,25 +163,21 @@ function DayDetails({ vin, date, onChanged }: { vin: string | null; date: string
             <tr key={r.id} className={r.category ?? undefined}>
               <td>{time(r.ts)} Uhr</td>
               <td className="num">{km(r.km)}</td>
-              <td className="num">{r.distanceKm > 0 ? `+${km(r.distanceKm)}` : "–"}</td>
+              <td className="num">+{km(r.distanceKm)}</td>
               <td>
-                {r.distanceKm > 0 || r.category ? (
-                  <span className="chips" role="group" aria-label="Fahrt markieren">
-                    {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
-                      <button
-                        key={c}
-                        className={`chip ${c}`}
-                        aria-pressed={r.category === c}
-                        // Nochmal auf die gewählte Markierung tippen entfernt sie wieder.
-                        onClick={() => void mark([r.id], r.category === c ? null : c)}
-                      >
-                        {CATEGORY_LABELS[c]}
-                      </button>
-                    ))}
-                  </span>
-                ) : (
-                  <span className="hint">nicht gefahren</span>
-                )}
+                <span className="chips" role="group" aria-label="Fahrt markieren">
+                  {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
+                    <button
+                      key={c}
+                      className={`chip ${c}`}
+                      aria-pressed={r.category === c}
+                      // Nochmal auf die gewählte Markierung tippen entfernt sie wieder.
+                      onClick={() => void mark([r.id], r.category === c ? null : c)}
+                    >
+                      {CATEGORY_LABELS[c]}
+                    </button>
+                  ))}
+                </span>
               </td>
             </tr>
           ))}

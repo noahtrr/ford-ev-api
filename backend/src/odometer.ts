@@ -138,12 +138,13 @@ function categoryKm(list: { segmentKm: number; category?: TripCategory | null }[
 }
 
 /**
- * Alle Messwerte eines Tages (Datum wie "2026-10-11" in der eingestellten Zeitzone),
+ * Die Messwerte eines Tages (Datum wie "2026-10-11" in der eingestellten Zeitzone),
  * älteste zuerst, mit den gefahrenen km seit dem vorherigen Messwert und der Markierung.
+ * Nur Messwerte mit neuen Kilometern: Zeitpunkte ohne Fahrt gibt es hier nicht.
  */
 export function dayReadings(readings: OdometerReading[], date: string, timeZone: string): DayReading[] {
   return withSegments(readings)
-    .filter((r) => periodKey(r.ts, "day", timeZone) === date)
+    .filter((r) => periodKey(r.ts, "day", timeZone) === date && round(r.segmentKm) > 0)
     .map((r) => ({ id: r.id ?? r.ts, ts: r.ts, km: r.km, distanceKm: round(r.segmentKm), category: r.category ?? null }));
 }
 

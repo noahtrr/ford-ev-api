@@ -113,7 +113,7 @@ describe("server", () => {
       odometer(store, "2026-01-10T17:00:00Z", 1050);
     });
     const day = await app.inject("/api/odometer/day?date=2026-01-10");
-    expect(day.json().readings.map((r: { distanceKm: number }) => r.distanceKm)).toEqual([0, 30, 20]);
+    expect(day.json().readings.map((r: { distanceKm: number }) => r.distanceKm)).toEqual([30, 20]);
 
     const put = await app.inject({
       method: "PUT",
@@ -124,19 +124,19 @@ describe("server", () => {
     await app.inject({ method: "PUT", url: "/api/odometer/category", payload: { ts: ["2026-01-10T17:00:00Z"], category: "private" } });
 
     const after = await app.inject("/api/odometer/day?date=2026-01-10");
-    expect(after.json().readings.map((r: { category: string | null }) => r.category)).toEqual([null, "business", "private"]);
+    expect(after.json().readings.map((r: { category: string | null }) => r.category)).toEqual(["business", "private"]);
     const days = await app.inject("/api/odometer?period=day");
     expect(days.json().rows[0]).toMatchObject({ distanceKm: 50, businessKm: 30, privateKm: 20 });
 
     await app.inject({ method: "PUT", url: "/api/odometer/category", payload: { ts: ["2026-01-10T17:00:00Z"], category: null } });
     const cleared = await app.inject("/api/odometer/day?date=2026-01-10");
-    expect(cleared.json().readings[2].category).toBeNull();
+    expect(cleared.json().readings[1].category).toBeNull();
 
     const bad = await app.inject({ method: "PUT", url: "/api/odometer/category", payload: { ts: ["x"], category: "urlaub" } });
     expect(bad.statusCode).toBe(400);
   });
 
-  it("zeigt nur Zeitpunkte, zu denen Ford den Kilometerstand wirklich geliefert hat", async () => {
+  it("zeigt nur Zeitpunkte, zu denen Ford neue Kilometer geliefert hat", async () => {
     const app = setup((store) => {
       odometer(store, "2026-01-10T08:00:00Z", 1000);
       // Beim Laden ändert sich nur der Akku, der Kilometerstand bleibt der von 08:00.
@@ -148,9 +148,10 @@ describe("server", () => {
     });
     const day = await app.inject("/api/odometer/day?date=2026-01-10");
     const readings = day.json().readings as { id: string; ts: string }[];
-    expect(readings.map((r) => r.ts)).toEqual(["2026-01-10T08:00:00Z", "2026-01-10T17:00:00Z"]);
+    // 08:00 ist der allererste Messwert (0 km) und fällt deshalb auch weg.
+    expect(readings.map((r) => r.ts)).toEqual(["2026-01-10T17:00:00Z"]);
 
-    await app.inject({ method: "PUT", url: "/api/odometer/category", payload: { ts: [readings[1].id], category: "private" } });
+    await app.inject({ method: "PUT", url: "/api/odometer/category", payload: { ts: [readings[0].id], category: "private" } });
     const days = await app.inject("/api/odometer?period=day");
     expect(days.json().rows[0]).toMatchObject({ distanceKm: 40, privateKm: 40, readings: 2 });
   });
