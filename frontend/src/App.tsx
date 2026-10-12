@@ -296,9 +296,15 @@ function OverviewPage() {
             <VehicleImage info={info} fetched={vehicleInfo !== null} />
             <h2>{name || s.vin}</h2>
             {name && <p className="vin">{s.vin}</p>}
-            <div className="tiles">
-              <Tile title="Akku" value={s.socPct === null ? null : show(s.socPct, " %")} />
+            <div className="hero-stats">
+              <Tile title="Akku" value={s.socPct === null ? null : show(s.socPct, " %")}>
+                <div className={`soc-meter${s.socPct !== null && s.socPct < 20 ? " low" : ""}`}>
+                  <span style={{ width: `${Math.min(100, Math.max(0, s.socPct ?? 0))}%` }} />
+                </div>
+              </Tile>
               <Tile title="Reichweite" value={s.rangeKm === null ? null : show(s.rangeKm, " km")} />
+            </div>
+            <div className="tiles">
               <Tile title="Kilometerstand" value={s.odometerKm === null ? null : show(s.odometerKm, " km")} />
               <Tile title="Ladekabel" value={s.plugStatus} />
               <Tile title="Ladestatus" value={s.chargeStatus} />

@@ -97,6 +97,17 @@ function Message({ error, success }: { error?: string | null; success?: string |
   return null;
 }
 
+/** App-Symbol und Titel oben auf der Anmeldeseite. */
+function LoginBrand() {
+  return (
+    <div className="login-brand">
+      <img src="/icon.svg" alt="" />
+      <h1>Mein Ford</h1>
+      <p>Bitte melde dich an.</p>
+    </div>
+  );
+}
+
 /** Anmeldeseite. Wird statt der App gezeigt, solange man nicht angemeldet ist. */
 export function LoginPage({ setupMissing, onLoggedIn }: { setupMissing: boolean; onLoggedIn: () => void }) {
   const [username, setUsername] = useState("");
@@ -106,13 +117,15 @@ export function LoginPage({ setupMissing, onLoggedIn }: { setupMissing: boolean;
 
   if (setupMissing) {
     return (
-      <main>
-        <h1>Mein Ford</h1>
-        <p className="message error">
-          Der Login ist auf dem Server noch nicht eingerichtet: LOGIN_USER und LOGIN_HASH fehlen. Bis das erledigt ist, bleibt die App
-          gesperrt.
-        </p>
-      </main>
+      <div className="login-screen">
+        <main className="login">
+          <LoginBrand />
+          <p className="message error">
+            Der Login ist auf dem Server noch nicht eingerichtet: LOGIN_USER und LOGIN_HASH fehlen. Bis das erledigt ist, bleibt die App
+            gesperrt.
+          </p>
+        </main>
+      </div>
     );
   }
 
@@ -144,32 +157,33 @@ export function LoginPage({ setupMissing, onLoggedIn }: { setupMissing: boolean;
   };
 
   return (
-    <main className="login">
-      <h1>Mein Ford</h1>
-      <p>Bitte melde dich an.</p>
-      {browserSupportsWebAuthn() && (
-        <>
-          <button className="button wide" onClick={withPasskey} disabled={busy}>
-            Mit Passkey anmelden
+    <div className="login-screen">
+      <main className="login">
+        <LoginBrand />
+        {browserSupportsWebAuthn() && (
+          <>
+            <button className="button wide" onClick={withPasskey} disabled={busy}>
+              Mit Passkey anmelden
+            </button>
+            <div className="divider">oder mit Passwort</div>
+          </>
+        )}
+        <form onSubmit={withPassword} className="form">
+          <label>
+            Benutzername
+            <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" required />
+          </label>
+          <label>
+            Passwort
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+          </label>
+          <button className="button wide secondary" type="submit" disabled={busy}>
+            Anmelden
           </button>
-          <div className="divider">oder mit Passwort</div>
-        </>
-      )}
-      <form onSubmit={withPassword} className="form">
-        <label>
-          Benutzername
-          <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" required />
-        </label>
-        <label>
-          Passwort
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-        </label>
-        <button className="button wide secondary" type="submit" disabled={busy}>
-          Anmelden
-        </button>
-      </form>
-      <Message error={error} />
-    </main>
+        </form>
+        <Message error={error} />
+      </main>
+    </div>
   );
 }
 
