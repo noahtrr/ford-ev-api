@@ -5,10 +5,28 @@ import { buildXlsx } from "./xlsx.js";
 // Ford schickt nur Daten, wenn das Auto wach ist. Deshalb zählt immer der letzte
 // bekannte Kilometerstand eines Zeitraums.
 
+/** Markierung einer Fahrt: privat oder geschäftlich. */
+export type TripCategory = "private" | "business";
+export const TRIP_CATEGORIES: TripCategory[] = ["private", "business"];
+
 /** Ein gespeicherter Kilometerstand mit Zeitpunkt (ISO-Zeit von Ford). */
 export interface OdometerReading {
   ts: string;
   km: number;
+  /**
+   * Markierung für die Strecke, die seit dem vorherigen Messwert gefahren wurde.
+   * null oder fehlend = nicht markiert.
+   */
+  category?: TripCategory | null;
+}
+
+/** Ein einzelner Messwert eines Tages, so wie er in der aufgeklappten Tagesansicht steht. */
+export interface DayReading {
+  ts: string;
+  km: number;
+  /** Gefahrene km seit dem vorherigen Messwert (auch wenn der am Vortag war). */
+  distanceKm: number;
+  category: TripCategory | null;
 }
 
 export type Period = "day" | "week" | "month" | "year";
@@ -26,6 +44,10 @@ export interface PeriodRow {
   distanceKm: number;
   /** Wie viele Messwerte es in diesem Zeitraum gab. */
   readings: number;
+  /** Davon als privat markierte km. */
+  privateKm: number;
+  /** Davon als geschäftlich markierte km. */
+  businessKm: number;
 }
 
 /** Ein Monat der Jahresübersicht. Werte sind null, wenn es noch keinen Kilometerstand gibt. */
@@ -36,6 +58,9 @@ export interface MonthRow {
   endKm: number | null;
   distanceKm: number | null;
   readings: number;
+  /** Als privat bzw. geschäftlich markierte km, null in der Zukunft. */
+  privateKm: number | null;
+  businessKm: number | null;
   /** Zeitpunkt des letzten Messwerts in diesem Monat, null = kein Messwert (Wert übernommen). */
   lastReading: string | null;
 }
@@ -45,6 +70,8 @@ export interface YearOverview {
   year: number;
   months: MonthRow[];
   totalKm: number | null;
+  totalPrivateKm: number | null;
+  totalBusinessKm: number | null;
 }
 
 /** Datum in der eingestellten Zeitzone (z. B. Europe/Berlin), nicht in der Zeitzone des Servers. */
@@ -88,24 +115,59 @@ function sorted(readings: OdometerReading[]): OdometerReading[] {
 }
 
 /**
+ * Jeder Messwert mit den km, die seit dem vorherigen Messwert gefahren wurden.
+ * Diese Strecke ist das, was als privat oder geschäftlich markiert wird.
+ */
+function withSegments(readings: OdometerReading[]): (OdometerReading & { segmentKm: number })[] {
+  let previous: number | null = null;
+  return sorted(readings).map((r) => {
+    const segmentKm = previous === null ? 0 : Math.max(0, r.km - previous);
+    previous = r.km;
+    return { ...r, segmentKm };
+  });
+}
+
+/** Zählt die markierten km einer Liste von Messwerten zusammen. */
+function categoryKm(list: { segmentKm: number; category?: TripCategory | null }[], category: TripCategory): number {
+  return round(list.reduce((sum, r) => sum + (r.category === category ? r.segmentKm : 0), 0));
+}
+
+/**
+ * Alle Messwerte eines Tages (Datum wie "2026-10-11" in der eingestellten Zeitzone),
+ * älteste zuerst, mit den gefahrenen km seit dem vorherigen Messwert und der Markierung.
+ */
+export function dayReadings(readings: OdometerReading[], date: string, timeZone: string): DayReading[] {
+  return withSegments(readings)
+    .filter((r) => periodKey(r.ts, "day", timeZone) === date)
+    .map((r) => ({ ts: r.ts, km: r.km, distanceKm: round(r.segmentKm), category: r.category ?? null }));
+}
+
+/**
  * Fasst die Kilometerstände nach Tagen, Wochen, Monaten oder Jahren zusammen.
  * Nur Zeiträume mit Messwerten kommen vor. Neueste zuerst.
  */
 export function summarize(readings: OdometerReading[], period: Period, timeZone: string): PeriodRow[] {
   const rows: PeriodRow[] = [];
   let previousEnd: number | null = null;
-  for (const r of sorted(readings)) {
+  for (const r of withSegments(readings)) {
     const key = periodKey(r.ts, period, timeZone);
-    const current = rows[rows.length - 1];
+    let current = rows[rows.length - 1];
     if (current?.period === key) {
       current.endKm = r.km;
       current.readings++;
     } else {
       if (current) previousEnd = current.endKm;
-      rows.push({ period: key, startKm: previousEnd ?? r.km, endKm: r.km, distanceKm: 0, readings: 1 });
+      current = { period: key, startKm: previousEnd ?? r.km, endKm: r.km, distanceKm: 0, readings: 1, privateKm: 0, businessKm: 0 };
+      rows.push(current);
     }
+    if (r.category === "private") current.privateKm += r.segmentKm;
+    if (r.category === "business") current.businessKm += r.segmentKm;
   }
-  for (const row of rows) row.distanceKm = round(Math.max(0, row.endKm - row.startKm));
+  for (const row of rows) {
+    row.distanceKm = round(Math.max(0, row.endKm - row.startKm));
+    row.privateKm = round(row.privateKm);
+    row.businessKm = round(row.businessKm);
+  }
   return rows.reverse();
 }
 
@@ -115,9 +177,9 @@ export function summarize(readings: OdometerReading[], period: Period, timeZone:
  * Monate in der Zukunft bleiben leer.
  */
 export function yearOverview(vin: string, readings: OdometerReading[], year: number, timeZone: string, now = new Date()): YearOverview {
-  const byMonth = new Map<number, OdometerReading[]>();
+  const byMonth = new Map<number, ReturnType<typeof withSegments>>();
   let before: number | null = null;
-  for (const r of sorted(readings)) {
+  for (const r of withSegments(readings)) {
     const d = localDate(r.ts, timeZone);
     if (d.year < year) before = r.km;
     if (d.year !== year) continue;
@@ -134,7 +196,8 @@ export function yearOverview(vin: string, readings: OdometerReading[], year: num
     const future = year > today.year || (year === today.year && month > today.month);
     if (list.length === 0) {
       const value = future ? null : carry;
-      months.push({ month, startKm: value, endKm: value, distanceKm: value === null ? null : 0, readings: 0, lastReading: null });
+      const zero = value === null ? null : 0;
+      months.push({ month, startKm: value, endKm: value, distanceKm: zero, readings: 0, privateKm: zero, businessKm: zero, lastReading: null });
       continue;
     }
     const startKm = carry ?? list[0].km;
@@ -145,14 +208,23 @@ export function yearOverview(vin: string, readings: OdometerReading[], year: num
       endKm: last.km,
       distanceKm: round(Math.max(0, last.km - startKm)),
       readings: list.length,
+      privateKm: categoryKm(list, "private"),
+      businessKm: categoryKm(list, "business"),
       lastReading: last.ts,
     });
     carry = last.km;
   }
 
   const known = months.filter((m) => m.distanceKm !== null);
-  const totalKm = known.length ? round(known.reduce((sum, m) => sum + (m.distanceKm ?? 0), 0)) : null;
-  return { vin, year, months, totalKm };
+  const sum = (pick: (m: MonthRow) => number | null) => (known.length ? round(known.reduce((s, m) => s + (pick(m) ?? 0), 0)) : null);
+  return {
+    vin,
+    year,
+    months,
+    totalKm: sum((m) => m.distanceKm),
+    totalPrivateKm: sum((m) => m.privateKm),
+    totalBusinessKm: sum((m) => m.businessKm),
+  };
 }
 
 export const MONTH_NAMES = [
@@ -170,7 +242,16 @@ export const MONTH_NAMES = [
   "Dezember",
 ];
 
-const COLUMNS = ["Monat", "Kilometerstand Monatsanfang", "Kilometerstand Monatsende", "Gefahrene km", "Messwerte", "Letzter Messwert"];
+const COLUMNS = [
+  "Monat",
+  "Kilometerstand Monatsanfang",
+  "Kilometerstand Monatsende",
+  "Gefahrene km",
+  "Davon privat km",
+  "Davon geschäftlich km",
+  "Messwerte",
+  "Letzter Messwert",
+];
 
 /** Die Tabelle der Jahresübersicht als Zeilen, so wie sie in CSV, TXT und Excel landet. */
 export function overviewTable(o: YearOverview, timeZone: string): { header: string[]; rows: (string | number | null)[][]; total: (string | number | null)[] } {
@@ -180,10 +261,12 @@ export function overviewTable(o: YearOverview, timeZone: string): { header: stri
     m.startKm,
     m.endKm,
     m.distanceKm,
+    m.privateKm,
+    m.businessKm,
     m.readings,
     m.lastReading ? dateTime.format(new Date(m.lastReading)) : null,
   ]);
-  return { header: COLUMNS, rows, total: [`Summe ${o.year}`, null, null, o.totalKm, o.months.reduce((s, m) => s + m.readings, 0), null] };
+  return { header: COLUMNS, rows, total: [`Summe ${o.year}`, null, null, o.totalKm, o.totalPrivateKm, o.totalBusinessKm, o.months.reduce((s, m) => s + m.readings, 0), null] };
 }
 
 /** Zahl im deutschen Format mit Komma, ohne Tausenderpunkt (lässt sich in Excel weiterrechnen). */

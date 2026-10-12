@@ -11,7 +11,7 @@ import { setupAuth } from "./auth/routes.js";
 import type { Store } from "./db.js";
 import { exchangeCode, loginUrl } from "./ford/auth.js";
 import type { FordClient } from "./ford/client.js";
-import { PERIODS, summarize, toCsv, toTxt, toXlsx, yearOverview, type Period } from "./odometer.js";
+import { PERIODS, TRIP_CATEGORIES, dayReadings, summarize, toCsv, toTxt, toXlsx, yearOverview, type Period, type TripCategory } from "./odometer.js";
 import { pollOnce } from "./poller.js";
 
 export function buildServer(config: Config, store: Store, client: FordClient, publicDir?: string) {
@@ -161,6 +161,53 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
         const vin = pickVin(req.query.vin);
         const period = req.query.period ?? "day";
         return { vin, vins: store.vins(), period, rows: vin ? summarize(store.odometerReadings(vin), period, config.timeZone) : [] };
+      },
+    );
+
+    app.get<{ Querystring: { vin?: string; date: string } }>(
+      "/api/odometer/day",
+      {
+        schema: {
+          tags: ["Kilometerstand"],
+          summary: "Alle Messwerte eines Tages mit Uhrzeit",
+          description:
+            "Für die aufgeklappte Tagesansicht: jeder Messwert mit Zeitpunkt, Kilometerstand, gefahrenen km seit dem vorherigen Messwert und der Markierung privat/geschäftlich. Älteste zuerst.",
+          querystring: {
+            type: "object",
+            required: ["date"],
+            properties: { vin: vinProperty, date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$", description: "Tag, z. B. 2026-10-11" } },
+          },
+        },
+      },
+      async (req) => {
+        const vin = pickVin(req.query.vin);
+        return { vin, date: req.query.date, readings: vin ? dayReadings(store.odometerReadings(vin), req.query.date, config.timeZone) : [] };
+      },
+    );
+
+    app.put<{ Body: { vin?: string; ts: string[]; category: TripCategory | null } }>(
+      "/api/odometer/category",
+      {
+        schema: {
+          tags: ["Kilometerstand"],
+          summary: "Fahrten als privat oder geschäftlich markieren",
+          description:
+            "Markiert die Strecke bis zu den angegebenen Messwerten (Zeitpunkte aus /api/odometer/day). category null entfernt die Markierung.",
+          body: {
+            type: "object",
+            required: ["ts", "category"],
+            properties: {
+              vin: vinProperty,
+              ts: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 5000 },
+              category: { type: ["string", "null"], enum: [...TRIP_CATEGORIES, null] },
+            },
+          },
+        },
+      },
+      async (req, reply) => {
+        const vin = pickVin(req.body.vin);
+        if (!vin) return reply.code(404).send({ error: "Noch keine Kilometerstände gespeichert." });
+        return { updated: store.setTripCategory(vin, req.body.ts, req.body.category) };
       },
     );
 

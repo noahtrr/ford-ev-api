@@ -1,7 +1,8 @@
 // Seiten zum Kilometerstand: Verlauf nach Tagen/Wochen/Monaten/Jahren und die Jahresübersicht.
-import { useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 type Period = "day" | "week" | "month" | "year";
+type Category = "private" | "business";
 
 interface PeriodRow {
   period: string;
@@ -9,13 +10,28 @@ interface PeriodRow {
   endKm: number;
   distanceKm: number;
   readings: number;
+  privateKm: number;
+  businessKm: number;
 }
+
+/** Ein Messwert in der aufgeklappten Tagesansicht. */
+interface DayReading {
+  ts: string;
+  km: number;
+  /** Gefahrene km seit dem vorherigen Messwert. */
+  distanceKm: number;
+  category: Category | null;
+}
+
+const CATEGORY_LABELS: Record<Category, string> = { private: "Privat", business: "Geschäftlich" };
 
 interface MonthRow {
   month: number;
   startKm: number | null;
   endKm: number | null;
   distanceKm: number | null;
+  privateKm: number | null;
+  businessKm: number | null;
   readings: number;
   lastReading: string | null;
 }
@@ -27,6 +43,8 @@ interface YearOverview {
   years: number[];
   months: MonthRow[];
   totalKm: number | null;
+  totalPrivateKm: number | null;
+  totalBusinessKm: number | null;
 }
 
 const PERIOD_TABS: { id: Period; label: string }[] = [
@@ -59,6 +77,124 @@ function periodLabel(period: string, type: Period): string {
   return period;
 }
 
+/** Kleine Zeile "privat 20 km · geschäftlich 30 km" unter den gefahrenen km. Leer, wenn nichts markiert ist. */
+function CategorySplit({ privateKm, businessKm }: { privateKm: number | null; businessKm: number | null }) {
+  if (!privateKm && !businessKm) return null;
+  return (
+    <span className="split">
+      {privateKm ? <span className="cat private">privat {km(privateKm)}</span> : null}
+      {businessKm ? <span className="cat business">geschäftl. {km(businessKm)}</span> : null}
+    </span>
+  );
+}
+
+/** Schickt die Markierung privat/geschäftlich (oder null = entfernen) für Messwerte ans Backend. */
+async function saveCategory(vin: string | null, ts: string[], category: Category | null): Promise<void> {
+  const res = await fetch("/api/odometer/category", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ vin: vin ?? undefined, ts, category }),
+  });
+  if (!res.ok) throw new Error(`Speichern fehlgeschlagen (Fehler ${res.status})`);
+}
+
+/**
+ * Aufgeklappter Tag: jeder Messwert mit Uhrzeit, Kilometerstand und den km seit dem vorherigen Messwert.
+ * Jede Strecke lässt sich als privat oder geschäftlich markieren.
+ */
+function DayDetails({ vin, date, onChanged }: { vin: string | null; date: string; onChanged: () => void }) {
+  const [readings, setReadings] = useState<DayReading[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    const query = new URLSearchParams({ date });
+    if (vin) query.set("vin", vin);
+    void fetch(`/api/odometer/day?${query}`)
+      .then((r) => r.json())
+      .then((d: { readings: DayReading[] }) => setReadings(d.readings));
+  }, [vin, date]);
+  useEffect(load, [load]);
+
+  const mark = async (ts: string[], category: Category | null) => {
+    if (ts.length === 0) return;
+    setError(null);
+    try {
+      await saveCategory(vin, ts, category);
+      load();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  if (readings === null) return <p className="hint">Lade…</p>;
+  // Nur Strecken, auf denen das Auto wirklich gefahren ist, lassen sich sinnvoll markieren.
+  const driven = readings.filter((r) => r.distanceKm > 0 || r.category !== null);
+  const time = (ts: string) => new Date(ts).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+
+  return (
+    <div className="day-details">
+      {driven.length > 0 && (
+        <div className="day-actions">
+          <span>Ganzen Tag markieren:</span>
+          <button className="chip private" onClick={() => void mark(driven.map((r) => r.ts), "private")}>
+            Privat
+          </button>
+          <button className="chip business" onClick={() => void mark(driven.map((r) => r.ts), "business")}>
+            Geschäftlich
+          </button>
+          <button className="chip" onClick={() => void mark(driven.filter((r) => r.category).map((r) => r.ts), null)}>
+            Zurücksetzen
+          </button>
+        </div>
+      )}
+      {error && <p className="message error">{error}</p>}
+      <table className="km-table readings">
+        <thead>
+          <tr>
+            <th>Uhrzeit</th>
+            <th className="num">Stand</th>
+            <th className="num">Seit davor</th>
+            <th>Fahrt</th>
+          </tr>
+        </thead>
+        <tbody>
+          {readings.map((r) => (
+            <tr key={r.ts} className={r.category ?? undefined}>
+              <td>{time(r.ts)} Uhr</td>
+              <td className="num">{km(r.km)}</td>
+              <td className="num">{r.distanceKm > 0 ? `+${km(r.distanceKm)}` : "–"}</td>
+              <td>
+                {r.distanceKm > 0 || r.category ? (
+                  <span className="chips" role="group" aria-label="Fahrt markieren">
+                    {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
+                      <button
+                        key={c}
+                        className={`chip ${c}`}
+                        aria-pressed={r.category === c}
+                        // Nochmal auf die gewählte Markierung tippen entfernt sie wieder.
+                        onClick={() => void mark([r.ts], r.category === c ? null : c)}
+                      >
+                        {CATEGORY_LABELS[c]}
+                      </button>
+                    ))}
+                  </span>
+                ) : (
+                  <span className="hint">nicht gefahren</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="hint">
+        „Seit davor“ = gefahrene km seit dem vorherigen Messwert. Diese Strecke wird mit Privat oder Geschäftlich markiert. Nochmal tippen
+        entfernt die Markierung.
+      </p>
+    </div>
+  );
+}
+
 /** Auswahl, wenn es mehr als ein Auto gibt. */
 function VinSelect({ vins, vin, onChange }: { vins: string[]; vin: string | null; onChange: (vin: string) => void }) {
   if (vins.length < 2) return null;
@@ -79,24 +215,37 @@ export function OdometerHistoryPage() {
   const [period, setPeriod] = useState<Period>("day");
   const [vin, setVin] = useState<string | null>(null);
   const [data, setData] = useState<{ vin: string | null; vins: string[]; rows: PeriodRow[] } | null>(null);
+  // Die aufgeklappten Tage (nur in der Ansicht "Tage").
+  const [open, setOpen] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
+  const load = useCallback(() => {
     const query = new URLSearchParams({ period });
     if (vin) query.set("vin", vin);
     void fetch(`/api/odometer?${query}`)
       .then((r) => r.json())
       .then(setData);
   }, [period, vin]);
+  useEffect(load, [load]);
+
+  const toggle = (day: string) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(day)) next.delete(day);
+      else next.add(day);
+      return next;
+    });
 
   const rows = data?.rows ?? [];
   const max = Math.max(1, ...rows.map((r) => r.distanceKm));
-  const total = rows.reduce((sum, r) => sum + r.distanceKm, 0);
+  const sum = (pick: (r: PeriodRow) => number) => Math.round(rows.reduce((s, r) => s + pick(r), 0) * 10) / 10;
+  const expandable = period === "day";
 
   return (
     <>
       <h1>Kilometerstand</h1>
       <p className="hint">
         Ford schickt nur Daten, wenn das Auto wach ist (fahren oder laden). Zeiträume ohne Messwert fehlen deshalb hier.
+        {period === "day" && " Tippe auf einen Tag, um die Uhrzeiten zu sehen und Fahrten als privat oder geschäftlich zu markieren."}
       </p>
       <VinSelect vins={data?.vins ?? []} vin={data?.vin ?? null} onChange={setVin} />
       <div className="tabs" role="tablist">
@@ -122,21 +271,50 @@ export function OdometerHistoryPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.period}>
-                  <td>{periodLabel(r.period, period)}</td>
-                  <td className="num">{km(r.distanceKm)}</td>
-                  <td className="bar-cell" aria-hidden="true">
-                    <span className="bar" style={{ width: `${(r.distanceKm / max) * 100}%` }} />
-                  </td>
-                  <td className="num">{km(r.endKm)}</td>
-                </tr>
-              ))}
+              {rows.map((r) => {
+                const isOpen = expandable && open.has(r.period);
+                return (
+                  <Fragment key={r.period}>
+                    <tr className={expandable ? "expandable" : undefined} onClick={expandable ? () => toggle(r.period) : undefined}>
+                      <td>
+                        {expandable ? (
+                          <button className="expand" aria-expanded={isOpen} onClick={(e) => (e.stopPropagation(), toggle(r.period))}>
+                            <span className="arrow" aria-hidden="true">
+                              ▸
+                            </span>
+                            {periodLabel(r.period, period)}
+                          </button>
+                        ) : (
+                          periodLabel(r.period, period)
+                        )}
+                      </td>
+                      <td className="num">
+                        {km(r.distanceKm)}
+                        <CategorySplit privateKm={r.privateKm} businessKm={r.businessKm} />
+                      </td>
+                      <td className="bar-cell" aria-hidden="true">
+                        <span className="bar" style={{ width: `${(r.distanceKm / max) * 100}%` }} />
+                      </td>
+                      <td className="num">{km(r.endKm)}</td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="details-row">
+                        <td colSpan={4}>
+                          <DayDetails vin={data.vin} date={r.period} onChanged={load} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
             <tfoot>
               <tr>
                 <td>Summe</td>
-                <td className="num">{km(Math.round(total * 10) / 10)}</td>
+                <td className="num">
+                  {km(sum((r) => r.distanceKm))}
+                  <CategorySplit privateKm={sum((r) => r.privateKm)} businessKm={sum((r) => r.businessKm)} />
+                </td>
                 <td className="bar-cell" />
                 <td />
               </tr>
@@ -210,6 +388,8 @@ export function YearOverviewPage() {
               <th className="num">Monatsanfang</th>
               <th className="num">Monatsende</th>
               <th className="num">Gefahren</th>
+              <th className="num">Privat</th>
+              <th className="num">Geschäftlich</th>
             </tr>
           </thead>
           <tbody>
@@ -219,6 +399,8 @@ export function YearOverviewPage() {
                 <td className="num">{km(m.startKm)}</td>
                 <td className="num">{km(m.endKm)}</td>
                 <td className="num">{km(m.distanceKm)}</td>
+                <td className="num">{km(m.privateKm)}</td>
+                <td className="num">{km(m.businessKm)}</td>
               </tr>
             ))}
           </tbody>
@@ -228,11 +410,16 @@ export function YearOverviewPage() {
               <td />
               <td />
               <td className="num">{km(data.totalKm)}</td>
+              <td className="num">{km(data.totalPrivateKm)}</td>
+              <td className="num">{km(data.totalBusinessKm)}</td>
             </tr>
           </tfoot>
         </table>
       </div>
-      <p className="hint">Grau = kein Messwert in diesem Monat, der Stand wurde übernommen.</p>
+      <p className="hint">
+        Grau = kein Messwert in diesem Monat, der Stand wurde übernommen. Privat und Geschäftlich zählen nur Fahrten, die du unter
+        Kilometerstand → Tage markiert hast. Der Rest ist nicht markiert.
+      </p>
     </>
   );
 }

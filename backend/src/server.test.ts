@@ -97,12 +97,42 @@ describe("server", () => {
     const csv = await app.inject("/api/odometer/year/export?year=2026&format=csv");
     expect(csv.headers["content-type"]).toMatch(/text\/csv/);
     expect(csv.headers["content-disposition"]).toBe('attachment; filename="kilometerstand-2026.csv"');
-    expect(csv.body).toContain("Januar 2026;1000;1000;0;1;");
+    expect(csv.body).toContain("Januar 2026;1000;1000;0;0;0;1;");
     const txt = await app.inject("/api/odometer/year/export?year=2026&format=txt");
     expect(txt.body).toContain("Kilometerstand 2026");
     const xlsx = await app.inject("/api/odometer/year/export?year=2026&format=xlsx");
     expect(xlsx.rawPayload.subarray(0, 2).toString()).toBe("PK");
     const bad = await app.inject("/api/odometer/year/export?format=pdf");
+    expect(bad.statusCode).toBe(400);
+  });
+
+  it("zeigt die Messwerte eines Tages und speichert die Markierung privat/geschäftlich", async () => {
+    const app = setup((store) => {
+      odometer(store, "2026-01-10T08:00:00Z", 1000);
+      odometer(store, "2026-01-10T09:00:00Z", 1030);
+      odometer(store, "2026-01-10T17:00:00Z", 1050);
+    });
+    const day = await app.inject("/api/odometer/day?date=2026-01-10");
+    expect(day.json().readings.map((r: { distanceKm: number }) => r.distanceKm)).toEqual([0, 30, 20]);
+
+    const put = await app.inject({
+      method: "PUT",
+      url: "/api/odometer/category",
+      payload: { ts: ["2026-01-10T09:00:00Z", "2026-01-10T17:00:00Z", "2020-01-01T00:00:00Z"], category: "business" },
+    });
+    expect(put.json()).toEqual({ updated: 2 });
+    await app.inject({ method: "PUT", url: "/api/odometer/category", payload: { ts: ["2026-01-10T17:00:00Z"], category: "private" } });
+
+    const after = await app.inject("/api/odometer/day?date=2026-01-10");
+    expect(after.json().readings.map((r: { category: string | null }) => r.category)).toEqual([null, "business", "private"]);
+    const days = await app.inject("/api/odometer?period=day");
+    expect(days.json().rows[0]).toMatchObject({ distanceKm: 50, businessKm: 30, privateKm: 20 });
+
+    await app.inject({ method: "PUT", url: "/api/odometer/category", payload: { ts: ["2026-01-10T17:00:00Z"], category: null } });
+    const cleared = await app.inject("/api/odometer/day?date=2026-01-10");
+    expect(cleared.json().readings[2].category).toBeNull();
+
+    const bad = await app.inject({ method: "PUT", url: "/api/odometer/category", payload: { ts: ["x"], category: "urlaub" } });
     expect(bad.statusCode).toBe(400);
   });
 

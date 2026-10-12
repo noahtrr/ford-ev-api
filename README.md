@@ -105,6 +105,8 @@ npm run build     # Produktions-Build
 | `GET /api/vehicles` | deine Fahrzeuge (direkt von Ford) |
 | `GET /api/snapshots/latest` | neueste gespeicherte Werte je Fahrzeug |
 | `GET /api/odometer?period=day` | Kilometerstand nach Tagen (`week`, `month`, `year`) |
+| `GET /api/odometer/day?date=2026-10-11` | Alle Messwerte eines Tages mit Uhrzeit und Markierung privat/geschäftlich |
+| `PUT /api/odometer/category` | Fahrten als privat oder geschäftlich markieren (`{"ts": [...], "category": "private"}`) |
 | `GET /api/odometer/year?year=2026` | Jahresübersicht mit 12 Monaten |
 | `GET /api/odometer/year/export?year=2026&format=csv` | Jahresübersicht als Datei (`csv`, `txt`, `xlsx`) |
 | `GET /api/health` | Lebenszeichen für Docker/Monitoring |
