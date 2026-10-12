@@ -52,8 +52,13 @@ export interface ChargingSession {
   /** AC, DC oder WIRELESS, null = unbekannt. */
   powerType: string | null;
   odometerKm: number | null;
+  /** Standort des Ladevorgangs. Einmal gespeichert, bleibt er fest (siehe applySavedLocations). */
   lat: number | null;
   lon: number | null;
+  /** Adresse zum Standort, z. B. „Hauptstraße 5, 12345 Berlin“. null = noch nicht nachgeschlagen. */
+  address: string | null;
+  /** Wann der Standort gespeichert wurde. null = noch nicht gespeichert. */
+  locationSavedAt: string | null;
   /** Letzter Ladestatus von Ford (z. B. COMPLETED, STOPPED). */
   lastStatus: string | null;
   /** Lädt gerade noch. */
@@ -110,6 +115,9 @@ function toSession(group: ChargingSample[], ongoing: boolean): ChargingSession |
   const capacity = group.find((s) => s.capacityKwh !== null)?.capacityKwh ?? null;
   if (energyKwh === null && capacity !== null && addedSocPct !== null) energyKwh = round((addedSocPct / 100) * capacity);
   const durationMin = Math.round((Date.parse(end) - Date.parse(start)) / 60_000);
+  // Standort: am liebsten der beim Laden, sonst irgendeiner mit eingestecktem Kabel.
+  const hasPosition = (s: ChargingSample) => s.lat !== null && s.lon !== null;
+  const position = group.slice(startIndex).find(hasPosition) ?? group.find(hasPosition);
 
   return {
     id: group[0].ts,
@@ -128,8 +136,10 @@ function toSession(group: ChargingSample[], ongoing: boolean): ChargingSession |
     avgPowerKw: energyKwh !== null && durationMin > 0 ? round(energyKwh / (durationMin / 60)) : null,
     powerType: group.find((s) => s.powerType)?.powerType ?? null,
     odometerKm: group.find((s) => s.odometerKm !== null)?.odometerKm ?? null,
-    lat: group.find((s) => s.lat !== null)?.lat ?? null,
-    lon: group.find((s) => s.lon !== null)?.lon ?? null,
+    lat: position?.lat ?? null,
+    lon: position?.lon ?? null,
+    address: null,
+    locationSavedAt: null,
     lastStatus: [...group].reverse().find((s) => s.chargeStatus)?.chargeStatus ?? null,
     ongoing,
     timeToFullMin: ongoing ? last.timeToFullMin : null,
@@ -162,6 +172,34 @@ export function detectSessions(samples: ChargingSample[]): ChargingSession[] {
   // Steckt das Kabel beim neuesten Messwert noch und lädt das Auto, läuft der Ladevorgang noch.
   close(group.length > 0 && isCharging(group[group.length - 1]));
   return sessions;
+}
+
+/** Ein gespeicherter Standort eines Ladevorgangs. */
+export interface SavedLocation {
+  lat: number;
+  lon: number;
+  address: string | null;
+  savedAt: string;
+}
+
+/**
+ * Setzt bei jedem Ladevorgang den gespeicherten Standort ein. So bleibt der Ort fest,
+ * auch wenn sich die Messwerte später ändern. Gibt die Ladevorgänge zurück, deren Standort
+ * noch nicht gespeichert ist (zum Speichern).
+ */
+export function applySavedLocations(sessions: ChargingSession[], saved: Map<string, SavedLocation>): ChargingSession[] {
+  const unsaved: ChargingSession[] = [];
+  for (const s of sessions) {
+    const loc = saved.get(s.id);
+    if (loc) Object.assign(s, { lat: loc.lat, lon: loc.lon, address: loc.address, locationSavedAt: loc.savedAt });
+    else if (s.lat !== null && s.lon !== null) unsaved.push(s);
+  }
+  return unsaved;
+}
+
+/** Link zum Standort in Google Maps, wie auf der Übersicht. */
+export function mapsUrl(lat: number, lon: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 }
 
 /** Die Ladevorgänge eines Tages (z. B. "2026-10-11"), älteste zuerst. */
@@ -315,6 +353,8 @@ export function chargingSessionsTable(vin: string, year: number, sessions: Charg
       "Kilometerstand",
       "Breitengrad",
       "Längengrad",
+      "Adresse",
+      "Google Maps",
       "Eingesteckt",
       "Zuletzt eingesteckt",
       "Markierung",
@@ -336,10 +376,12 @@ export function chargingSessionsTable(vin: string, year: number, sessions: Charg
       s.odometerKm,
       s.lat,
       s.lon,
+      s.address,
+      s.lat !== null && s.lon !== null ? mapsUrl(s.lat, s.lon) : null,
       `${date.format(new Date(s.pluggedIn))} ${time.format(new Date(s.pluggedIn))}`,
       s.ongoing ? null : `${date.format(new Date(s.pluggedOut))} ${time.format(new Date(s.pluggedOut))}`,
       s.category ? CATEGORY_NAMES[s.category] : null,
     ]),
-    total: [`Summe ${year}`, null, null, hours(t.durationMin), null, null, t.addedSocPct, t.energyKwh, null, null, null, t.addedRangeKm, null, null, null, null, null, null, null],
+    total: [`Summe ${year}`, null, null, hours(t.durationMin), null, null, t.addedSocPct, t.energyKwh, null, null, null, t.addedRangeKm, null, null, null, null, null, null, null, null, null],
   };
 }

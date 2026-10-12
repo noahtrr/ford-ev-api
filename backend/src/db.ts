@@ -6,7 +6,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Tokens } from "./ford/auth.js";
 import { parseGarage, type VehicleInfo } from "./ford/garage.js";
-import type { ChargingSample } from "./charging.js";
+import type { ChargingSample, SavedLocation } from "./charging.js";
 import type { OdometerReading, TripCategory } from "./odometer.js";
 import { parseBodyStatus, parseChargingDetails, parseDepartureTimes, type VehicleSnapshot } from "./ford/telemetry.js";
 
@@ -85,6 +85,16 @@ export class Store {
         ts TEXT NOT NULL,
         category TEXT NOT NULL CHECK (category IN ('private', 'business')),
         PRIMARY KEY (vin, ts)
+      );
+      -- Standort eines Ladevorgangs, einmal gespeichert (id = erster Messwert des Ladevorgangs).
+      CREATE TABLE IF NOT EXISTS charging_locations (
+        vin TEXT NOT NULL,
+        id TEXT NOT NULL,
+        lat REAL NOT NULL,
+        lon REAL NOT NULL,
+        address TEXT,
+        saved_at TEXT NOT NULL,
+        PRIMARY KEY (vin, id)
       );
       -- Das eine Konto für die Weboberfläche. Benutzername kommt aus LOGIN_USER.
       CREATE TABLE IF NOT EXISTS account (
@@ -262,6 +272,26 @@ export class Store {
       ...parseChargingDetails((JSON.parse(r.raw as string) as { metrics?: unknown }).metrics),
       category: (r.category as TripCategory | null) ?? null,
     }));
+  }
+
+  /** Gespeicherte Standorte der Ladevorgänge eines Autos, nach Kennung des Ladevorgangs. */
+  chargingLocations(vin: string): Map<string, SavedLocation> {
+    const rows = this.db.prepare("SELECT id, lat, lon, address, saved_at FROM charging_locations WHERE vin = ?").all(vin) as Record<string, unknown>[];
+    return new Map(
+      rows.map((r) => [r.id as string, { lat: r.lat as number, lon: r.lon as number, address: r.address as string | null, savedAt: r.saved_at as string }]),
+    );
+  }
+
+  /** Speichert den Standort eines Ladevorgangs. Ein schon gespeicherter bleibt unverändert. */
+  saveChargingLocation(vin: string, id: string, lat: number, lon: number, now = new Date()): void {
+    this.db
+      .prepare("INSERT OR IGNORE INTO charging_locations (vin, id, lat, lon, saved_at) VALUES (?, ?, ?, ?, ?)")
+      .run(vin, id, lat, lon, now.toISOString());
+  }
+
+  /** Trägt die nachgeschlagene Adresse zu einem gespeicherten Standort ein. */
+  setChargingAddress(vin: string, id: string, address: string): void {
+    this.db.prepare("UPDATE charging_locations SET address = ? WHERE vin = ? AND id = ?").run(address, vin, id);
   }
 
   /** Markiert Ladevorgänge (Kennung = erster Messwert) als privat oder geschäftlich, null entfernt die Markierung. */
