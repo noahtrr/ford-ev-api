@@ -123,8 +123,87 @@ dd {
   object-fit: contain;
 }
 .car-drawing {
-  width: min(100%, 18rem);
-  color: var(--accent-text);
+  width: min(100%, 22rem);
+}
+.car-drawing .shadow {
+  fill: #000;
+  opacity: 0.35;
+}
+.car-drawing .body {
+  fill: #c9d3e3;
+}
+.car-drawing .glass {
+  fill: #1b2435;
+}
+.car-drawing .pillar {
+  stroke: #0b0f17;
+  stroke-width: 5;
+}
+.car-drawing .trim {
+  stroke: #94a0b5;
+  stroke-width: 1.5;
+}
+.car-drawing .headlight {
+  stroke: #fff;
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.car-drawing .taillight {
+  fill: none;
+  stroke: var(--danger);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.car-drawing .arch {
+  fill: var(--surface);
+}
+.car-drawing .tire {
+  fill: #0b0f17;
+}
+.car-drawing .rim {
+  fill: #94a0b5;
+}
+.car-drawing .port {
+  fill: #34425c;
+}
+.car-drawing.charging .port {
+  fill: var(--ok);
+  animation: port-glow 1.6s ease-in-out infinite;
+}
+.car-drawing .post {
+  fill: var(--surface-2);
+  stroke: var(--border-strong);
+}
+.car-drawing .screen {
+  fill: var(--ok-soft);
+}
+.car-drawing .bolt {
+  fill: var(--ok);
+}
+.car-drawing .cable {
+  fill: none;
+  stroke: #0b0f17;
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.car-drawing .current {
+  fill: none;
+  stroke: var(--ok);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-dasharray: 4 10;
+  filter: drop-shadow(0 0 3px var(--ok));
+  animation: current-flow 0.8s linear infinite;
+}
+@keyframes current-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+@keyframes port-glow {
+  50% {
+    opacity: 0.45;
+  }
 }
 .vehicle-image figcaption {
   font-size: 0.85rem;
@@ -750,5 +829,6 @@ h2 {
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+    animation: none !important;
   }
 }
