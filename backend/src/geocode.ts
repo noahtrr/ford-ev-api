@@ -20,6 +20,11 @@ export async function reverseGeocode(lat: number, lon: number): Promise<string |
   return formatAddress((await res.json()) as Parameters<typeof formatAddress>[0]);
 }
 
+/** Rundet eine Position auf 4 Nachkommastellen (etwa 10 m), damit kleine GPS-Schwankungen denselben Ortsnamen nutzen. */
+export function placeKey(lat: number, lon: number): string {
+  return `${lat.toFixed(4)},${lon.toFixed(4)}`;
+}
+
 export type AddressLookup = (lat: number, lon: number) => Promise<string | null>;
 
 /**

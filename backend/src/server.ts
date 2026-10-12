@@ -21,12 +21,12 @@ import {
   detectSessions,
   summarizeCharging,
 } from "./charging.js";
-import { addressQueue, type AddressLookup } from "./geocode.js";
+import { addressQueue, placeKey, type AddressLookup } from "./geocode.js";
 import { EXPORT_FORMATS, type ExportFormat } from "./export.js";
 import { PERIODS, TRIP_CATEGORIES, dayReadings, overviewTable, summarize, yearOverview, type Period, type TripCategory } from "./odometer.js";
 import { pollOnce } from "./poller.js";
 
-/** lookupAddress: schlägt Adressen zu Ladeorten nach. Ohne bleibt die Adresse leer (z. B. in Tests). */
+/** lookupAddress: schlägt Adressen zu Ladeorten und zum aktuellen Standort nach. Ohne bleibt die Adresse leer (z. B. in Tests). */
 export function buildServer(config: Config, store: Store, client: FordClient, publicDir?: string, lookupAddress?: AddressLookup) {
   // trustProxy: die App steht hinter Caddy, das die echte IP und "https" in X-Forwarded-* mitschickt.
   // Nur Absendern aus dem eigenen Rechner oder internen Netz (z. B. Caddy im Docker-Netz) glauben,
@@ -133,16 +133,38 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
       async () => store.vehicleInfo(),
     );
 
+    // Eine gemeinsame Warteschlange für Adressen, weil Nominatim nur eine Anfrage pro Sekunde erlaubt.
+    // Schlüssel "charge|<vin>|<Ladevorgang>" für Ladeorte, "place|<Position>" für den aktuellen Standort.
+    const queueAddress = lookupAddress
+      ? addressQueue(
+          lookupAddress,
+          (key, address) => {
+            const [kind, ...rest] = key.split("|");
+            if (kind === "place") store.savePlaceName(rest[0], address);
+            else store.setChargingAddress(rest[0], rest.slice(1).join("|"), address);
+          },
+          (err) => app.log.warn({ err }, "Adresse zum Standort nicht gefunden"),
+        )
+      : null;
+
     app.get(
       "/api/snapshots/latest",
       {
         schema: {
           tags: ["Fahrzeug"],
           summary: "Neuester Stand je Auto",
-          description: "Akku, Reichweite, Kilometerstand, Standort, Türen, Fenster und mehr, wie in der Übersicht.",
+          description:
+            "Akku, Reichweite, Kilometerstand, Standort, Türen, Fenster und mehr, wie in der Übersicht. address ist der Ortsname zum Standort; beim ersten Abruf einer neuen Position wird er nachgeschlagen und ist erst beim nächsten Abruf da.",
         },
       },
-      async () => store.latestSnapshots(),
+      async () =>
+        store.latestSnapshots().map((s) => {
+          if (s.lat === null || s.lon === null) return { ...s, address: null };
+          const key = placeKey(s.lat, s.lon);
+          const address = store.placeName(key);
+          if (address === null) queueAddress?.(`place|${key}`, s.lat, s.lon);
+          return { ...s, address };
+        }),
     );
 
     // Die letzte Antwort von Fords /electric/departure-times, unverändert. Zum Nachsehen,
@@ -289,13 +311,6 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
     );
 
     // ---- Ladevorgänge ----
-    const queueAddress = lookupAddress
-      ? addressQueue(
-          lookupAddress,
-          (key, address) => store.setChargingAddress(key.slice(0, key.indexOf("|")), key.slice(key.indexOf("|") + 1), address),
-          (err) => app.log.warn({ err }, "Adresse zum Ladeort nicht gefunden"),
-        )
-      : null;
     // Jeder Ladevorgang bekommt seinen Standort fest gespeichert, sobald er das erste Mal erkannt wird.
     const sessionsOf = (vin: string) => {
       const sessions = detectSessions(store.chargingSamples(vin));
@@ -304,7 +319,7 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
       }
       const saved = store.chargingLocations(vin);
       applySavedLocations(sessions, saved);
-      for (const [id, loc] of saved) if (loc.address === null) queueAddress?.(`${vin}|${id}`, loc.lat, loc.lon);
+      for (const [id, loc] of saved) if (loc.address === null) queueAddress?.(`charge|${vin}|${id}`, loc.lat, loc.lon);
       return sessions;
     };
     const noData = { error: "Noch keine Messwerte gespeichert." };

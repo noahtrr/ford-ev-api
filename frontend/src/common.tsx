@@ -20,6 +20,15 @@ export function mapsUrl(lat: number, lon: number): string {
   return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
 }
 
+/** Kartenausschnitt wie ein Foto: nicht verschiebbar, ein Tipp öffnet Google Maps (Übersicht und Ladevorgänge). */
+export function MapFrame({ lat, lon, label }: { lat: number; lon: number; label: string }) {
+  return (
+    <a className="map-frame" href={mapsUrl(lat, lon)} target="_blank" rel="noopener noreferrer" aria-label={`${label} in Google Maps öffnen`}>
+      <iframe title={`Kartenausschnitt: ${label}`} src={`https://maps.google.com/maps?q=${lat},${lon}&z=16&output=embed`} loading="lazy" tabIndex={-1} />
+    </a>
+  );
+}
+
 export function num(value: number | null | undefined, unit: string): string {
   return value === null || value === undefined ? "–" : `${value.toLocaleString("de-DE", { maximumFractionDigits: 1 })} ${unit}`;
 }

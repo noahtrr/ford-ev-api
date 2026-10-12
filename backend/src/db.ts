@@ -96,6 +96,11 @@ export class Store {
         saved_at TEXT NOT NULL,
         PRIMARY KEY (vin, id)
       );
+      -- Ortsnamen zum aktuellen Standort, nach gerundeter Position (etwa 10 m genau), damit jede Stelle nur einmal nachgeschlagen wird.
+      CREATE TABLE IF NOT EXISTS place_names (
+        key TEXT PRIMARY KEY,
+        address TEXT NOT NULL
+      );
       -- Das eine Konto für die Weboberfläche. Benutzername kommt aus LOGIN_USER.
       CREATE TABLE IF NOT EXISTS account (
         id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -292,6 +297,16 @@ export class Store {
   /** Trägt die nachgeschlagene Adresse zu einem gespeicherten Standort ein. */
   setChargingAddress(vin: string, id: string, address: string): void {
     this.db.prepare("UPDATE charging_locations SET address = ? WHERE vin = ? AND id = ?").run(address, vin, id);
+  }
+
+  /** Gespeicherter Ortsname zu einer gerundeten Position (siehe placeKey), sonst null. */
+  placeName(key: string): string | null {
+    const row = this.db.prepare("SELECT address FROM place_names WHERE key = ?").get(key) as { address: string } | undefined;
+    return row?.address ?? null;
+  }
+
+  savePlaceName(key: string, address: string): void {
+    this.db.prepare("INSERT OR REPLACE INTO place_names (key, address) VALUES (?, ?)").run(key, address);
   }
 
   /** Markiert Ladevorgänge (Kennung = erster Messwert) als privat oder geschäftlich, null entfernt die Markierung. */
