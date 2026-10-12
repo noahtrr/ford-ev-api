@@ -12,13 +12,6 @@ window.fetch = async (...args) => {
   return res;
 };
 
-interface Departure {
-  day: string;
-  time: string;
-  enabled: boolean;
-  preconditioning: boolean | null;
-}
-
 interface Opening {
   name: string;
   open: boolean | null;
@@ -36,12 +29,9 @@ interface Snapshot {
   address?: string | null;
   plugStatus: string | null;
   chargeStatus: string | null;
-  departures: Departure[] | null;
   locked: boolean | null;
   doors: Opening[] | null;
   windows: Opening[] | null;
-  battery12v: { socPct: number | null; voltage: number | null } | null;
-  alarm: string | null;
 }
 
 interface VehicleInfo {
@@ -121,16 +111,6 @@ function WindowsTile({ windows }: { windows: Opening[] | null }) {
   );
 }
 
-function Battery12vTile({ battery }: { battery: Snapshot["battery12v"] }) {
-  const parts = battery
-    ? [battery.socPct !== null ? `${Math.round(battery.socPct)} %` : null, battery.voltage !== null ? `${battery.voltage.toFixed(1)} V` : null]
-    : [];
-  const value = parts.filter(Boolean).join(" · ") || null;
-  // Unter 12,2 V oder 50 % ist eine 12-V-Batterie ziemlich leer.
-  const low = !!battery && ((battery.voltage !== null && battery.voltage < 12.2) || (battery.socPct !== null && battery.socPct < 50));
-  return <Tile title="12-V-Batterie" value={value} tone={value === null ? undefined : low ? "warn" : "ok"} />;
-}
-
 /** Standort wie bei den Ladevorgängen: Ortsname, Kartenausschnitt und Link zu Google Maps. Geht über die ganze Breite. */
 function PositionTile({ lat, lon, address }: { lat: number | null; lon: number | null; address: string | null }) {
   if (lat === null || lon === null) return <Tile title="Standort" value={null} />;
@@ -148,21 +128,6 @@ function PositionTile({ lat, lon, address }: { lat: number | null; lon: number |
       </div>
     </div>
   );
-}
-
-/** Übersetzt Fords Alarm-Status. Unbekannte Werte werden so angezeigt, wie Ford sie schickt. */
-function alarmText(alarm: string | null): { text: string | null; tone?: "ok" | "warn" } {
-  if (alarm === null) return { text: null };
-  const a = alarm.toUpperCase();
-  if (["ARMED", "SET", "ON"].includes(a)) return { text: "Scharf", tone: "ok" };
-  if (["DISARMED", "NOT_ARMED", "UNSET", "NOT_SET", "OFF"].includes(a)) return { text: "Aus" };
-  if (["TRIGGERED", "ACTIVE", "ALARM", "SOUNDING"].includes(a)) return { text: "Ausgelöst!", tone: "warn" };
-  return { text: alarm };
-}
-
-function AlarmTile({ alarm }: { alarm: string | null }) {
-  const { text, tone } = alarmText(alarm);
-  return <Tile title="Alarmanlage" value={text} tone={tone} />;
 }
 
 /** Ein gezeichneter Ford Explorer von der Seite. Beim Laden steht er an einer Ladesäule und Strom fließt ins Auto. */
@@ -244,58 +209,6 @@ function VehicleImage({ info, charging }: { info: VehicleInfo | undefined; charg
   );
 }
 
-const DAYS = ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"];
-const DAY_NAMES = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"];
-
-/** Minuten ab Montag 00:00, damit sich Abfahrtszeiten vergleichen lassen. */
-function minutesInWeek(day: number, time: string): number {
-  const [h, m] = time.split(":").map(Number);
-  return day * 24 * 60 + h * 60 + m;
-}
-
-/** Die nächste eingeschaltete Abfahrtszeit ab jetzt (Ortszeit des Browsers). */
-function nextDeparture(departures: Departure[], now = new Date()): Departure | undefined {
-  const week = 7 * 24 * 60;
-  const today = (now.getDay() + 6) % 7; // JavaScript zählt ab Sonntag, Ford ab Montag
-  const nowMinutes = minutesInWeek(today, `${now.getHours()}:${now.getMinutes()}`);
-  const until = (d: Departure) => (minutesInWeek(DAYS.indexOf(d.day), d.time) - nowMinutes + week) % week;
-  return departures
-    .filter((d) => d.enabled)
-    .reduce<Departure | undefined>((best, d) => (!best || until(d) < until(best) ? d : best), undefined);
-}
-
-function Departures({ departures }: { departures: Departure[] | null }) {
-  if (departures === null) {
-    return (
-      <div className="departures">
-        <h3>Abfahrtszeiten</h3>
-        <p>Ford liefert für dieses Auto keine Abfahrtszeiten.</p>
-      </div>
-    );
-  }
-  const active = departures.filter((d) => d.enabled);
-  const next = nextDeparture(departures);
-  return (
-    <div className="departures">
-      <h3>Abfahrtszeiten</h3>
-      {active.length === 0 ? (
-        <p>Keine Abfahrtszeit eingestellt.</p>
-      ) : (
-        <ul>
-          {active.map((d) => (
-            <li key={`${d.day}-${d.time}`} className={d === next ? "next" : undefined}>
-              <span>{DAY_NAMES[DAYS.indexOf(d.day)]}</span>
-              <strong>{d.time} Uhr</strong>
-              {d === next && <span className="tag">Nächste</span>}
-              {d.preconditioning && <span className="tag">Vorklimatisieren</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
 function show(value: number | string | null, unit = ""): string {
   return value === null ? "–" : `${value}${unit}`;
 }
@@ -361,11 +274,8 @@ function OverviewPage() {
               <Tile title="Ladestatus" value={s.chargeStatus} />
               <DoorsTile doors={s.doors ?? null} locked={s.locked ?? null} />
               <WindowsTile windows={s.windows ?? null} />
-              <Battery12vTile battery={s.battery12v ?? null} />
-              <AlarmTile alarm={s.alarm ?? null} />
               <PositionTile lat={s.lat ?? null} lon={s.lon ?? null} address={s.address ?? null} />
             </div>
-            <Departures departures={s.departures ?? null} />
             <small>Stand: {new Date(s.ts).toLocaleString("de-DE")}</small>
           </section>
         );
