@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { LOGGED_OUT, LoginPage, ProfilePage, type Me } from "./Account";
 import { ChargingPage } from "./Charging";
 import { OdometerPage } from "./Odometer";
+import { mapsUrl } from "./common";
 
 // Antwortet das Backend mit 401, ist die Anmeldung abgelaufen: dann zur Anmeldeseite.
 const originalFetch = window.fetch.bind(window);
@@ -130,7 +131,7 @@ function Battery12vTile({ battery }: { battery: Snapshot["battery12v"] }) {
 
 function PositionTile({ lat, lon }: { lat: number | null; lon: number | null }) {
   if (lat === null || lon === null) return <Tile title="Standort" value={null} />;
-  const url = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+  const url = mapsUrl(lat, lon);
   return (
     <Tile title="Standort" value={`${lat.toFixed(5)}, ${lon.toFixed(5)}`}>
       <a className="button small" href={url} target="_blank" rel="noopener noreferrer">

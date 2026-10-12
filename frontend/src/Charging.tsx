@@ -2,7 +2,7 @@
 // und Export (Jahresübersicht und einzelne Ladevorgänge als CSV, Excel und TXT).
 // Ford meldet keine fertigen Ladevorgänge, das Backend leitet sie aus Ladestand, Kabel und Ladestatus ab.
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { CATEGORY_LABELS, ExportButtons, MONTHS, PageTabs, PeriodTabs, VinSelect, hours, km, num, periodLabel, type Category, type Period } from "./common";
+import { CATEGORY_LABELS, ExportButtons, MONTHS, PageTabs, PeriodTabs, VinSelect, hours, km, mapsUrl, num, periodLabel, type Category, type Period } from "./common";
 
 interface Totals {
   sessions: number;
@@ -40,6 +40,10 @@ interface Session {
   odometerKm: number | null;
   lat: number | null;
   lon: number | null;
+  /** Adresse zum Ort, null = (noch) nicht nachgeschlagen. */
+  address: string | null;
+  /** Wann der Ort fest gespeichert wurde. */
+  locationSavedAt: string | null;
   lastStatus: string | null;
   ongoing: boolean;
   timeToFullMin: number | null;
@@ -94,6 +98,30 @@ async function saveCategory(vin: string | null, ids: string[], category: Categor
   if (!res.ok) throw new Error(`Speichern fehlgeschlagen (Fehler ${res.status})`);
 }
 
+/**
+ * Kartenausschnitt vom Ladeort, wie ein Foto: nicht verschiebbar, ein Tipp öffnet Google Maps.
+ * Der Ort wurde beim Erkennen des Ladevorgangs fest gespeichert.
+ */
+function LocationSnapshot({ lat, lon, savedAt }: { lat: number; lon: number; savedAt: string | null }) {
+  const url = mapsUrl(lat, lon);
+  return (
+    <div className="location-snapshot">
+      <a className="map-frame" href={url} target="_blank" rel="noopener noreferrer" aria-label="Ladeort in Google Maps öffnen">
+        <iframe title="Kartenausschnitt vom Ladeort" src={`https://maps.google.com/maps?q=${lat},${lon}&z=16&output=embed`} loading="lazy" tabIndex={-1} />
+      </a>
+      <div className="location-meta">
+        <span>
+          {lat.toFixed(5)}, {lon.toFixed(5)}
+          {savedAt && ` · gespeichert ${dateTime(savedAt)}`}
+        </span>
+        <a className="button small" href={url} target="_blank" rel="noopener noreferrer">
+          In Google Maps öffnen
+        </a>
+      </div>
+    </div>
+  );
+}
+
 /** Ein Ladevorgang in der aufgeklappten Tagesansicht. */
 function SessionCard({ s, onMark }: { s: Session; onMark: (category: Category | null) => void }) {
   return (
@@ -144,16 +172,9 @@ function SessionCard({ s, onMark }: { s: Session; onMark: (category: Category | 
         <dt>Kilometerstand</dt>
         <dd>{km(s.odometerKm)}</dd>
         <dt>Ort</dt>
-        <dd>
-          {s.lat !== null && s.lon !== null ? (
-            <a href={`https://www.openstreetmap.org/?mlat=${s.lat}&mlon=${s.lon}#map=17/${s.lat}/${s.lon}`} target="_blank" rel="noopener noreferrer">
-              Auf der Karte zeigen
-            </a>
-          ) : (
-            "Ford liefert keine Angabe"
-          )}
-        </dd>
+        <dd>{s.lat !== null && s.lon !== null ? (s.address ?? `${s.lat.toFixed(5)}, ${s.lon.toFixed(5)}`) : "Ford liefert keine Angabe"}</dd>
       </dl>
+      {s.lat !== null && s.lon !== null && <LocationSnapshot lat={s.lat} lon={s.lon} savedAt={s.locationSavedAt} />}
       <span className="chips" role="group" aria-label="Ladevorgang markieren">
         {(Object.keys(CATEGORY_LABELS) as Category[]).map((c) => (
           <button key={c} className={`chip ${c}`} aria-pressed={s.category === c} onClick={() => onMark(s.category === c ? null : c)}>

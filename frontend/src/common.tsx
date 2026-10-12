@@ -15,6 +15,11 @@ export const PERIOD_TABS: { id: Period; label: string }[] = [
 export const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
 
 /** Zahl im deutschen Format mit Einheit, "–" wenn es keinen Wert gibt. */
+/** Link zum Standort in Google Maps (Übersicht und Ladevorgänge). */
+export function mapsUrl(lat: number, lon: number): string {
+  return `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+}
+
 export function num(value: number | null | undefined, unit: string): string {
   return value === null || value === undefined ? "–" : `${value.toLocaleString("de-DE", { maximumFractionDigits: 1 })} ${unit}`;
 }

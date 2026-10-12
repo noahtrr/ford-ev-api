@@ -3,6 +3,7 @@ import type { Config } from "./config.js";
 import { Store } from "./db.js";
 import { FordClient } from "./ford/client.js";
 import { parseTelemetry } from "./ford/telemetry.js";
+import type { AddressLookup } from "./geocode.js";
 import { buildServer } from "./server.js";
 
 const config: Config = {
@@ -23,10 +24,10 @@ const config: Config = {
   },
 };
 
-function setup(fill?: (store: Store) => void) {
+function setup(fill?: (store: Store) => void, lookupAddress?: AddressLookup) {
   const store = new Store(":memory:");
   fill?.(store);
-  return buildServer(config, store, new FordClient(config.ford, store));
+  return buildServer(config, store, new FordClient(config.ford, store), undefined, lookupAddress);
 }
 
 /** Speichert einen Kilometerstand für Auto V1. */
@@ -198,5 +199,46 @@ describe("server", () => {
     expect(csv.body).toContain("10.01.2026;17:00;20:00;3:00 h;30;80;50;35;11,7");
     const xlsx = await app.inject("/api/charging/year/export?year=2026&format=xlsx");
     expect(xlsx.rawPayload.subarray(0, 2).toString()).toBe("PK");
+  });
+
+  it("speichert den Standort jedes Ladevorgangs fest und schlägt die Adresse nach", async () => {
+    let store!: Store;
+    const charge = (ts: string, soc: number, plug: string, status: string, lat: number) =>
+      store.saveSnapshot(
+        parseTelemetry({
+          vin: "V1",
+          metrics: {
+            xevBatteryStateOfCharge: { value: soc, updateTime: ts },
+            xevPlugChargerStatus: { value: plug, updateTime: ts },
+            xevBatteryChargeDisplayStatus: { value: status, updateTime: ts },
+            position: { value: { location: { lat, lon: 13.4 } }, updateTime: ts },
+          },
+        })[0],
+      );
+    const lookups: number[] = [];
+    const app = setup(
+      (s) => {
+        store = s;
+        charge("2026-01-10T16:00:00Z", 30, "CONNECTED", "IN_PROGRESS", 52.5);
+        charge("2026-01-10T18:00:00Z", 60, "CONNECTED", "IN_PROGRESS", 52.5);
+      },
+      async (lat) => {
+        lookups.push(lat);
+        return "Hauptstraße 5, 10115 Berlin";
+      },
+    );
+    const first = (await app.inject("/api/charging/day?date=2026-01-10")).json().sessions[0];
+    expect(first).toMatchObject({ lat: 52.5, lon: 13.4 });
+    expect(first.locationSavedAt).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Ein späterer Messwert mit anderer Position ändert den gespeicherten Ort nicht mehr.
+    charge("2026-01-10T19:00:00Z", 80, "CONNECTED", "COMPLETED", 48.1);
+    const later = (await app.inject("/api/charging/day?date=2026-01-10")).json().sessions[0];
+    expect(later).toMatchObject({ lat: 52.5, lon: 13.4, address: "Hauptstraße 5, 10115 Berlin" });
+    expect(lookups).toEqual([52.5]);
+
+    const csv = await app.inject("/api/charging/year/export?year=2026&format=csv&type=sessions");
+    expect(csv.body).toContain("Hauptstraße 5, 10115 Berlin;https://www.google.com/maps/search/?api=1&query=52.5,13.4");
   });
 });

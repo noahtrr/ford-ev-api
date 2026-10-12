@@ -782,6 +782,35 @@ h2 {
 .session-facts dd {
   margin: 0;
 }
+/* Kartenausschnitt vom Ladeort */
+.location-snapshot {
+  margin: 0 0 0.6rem;
+}
+.map-frame {
+  position: relative;
+  display: block;
+  height: 9rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: var(--border);
+}
+.map-frame iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  /* Wie ein Foto: nicht verschieben oder zoomen, ein Tipp öffnet Google Maps. */
+  pointer-events: none;
+}
+.location-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 0.75rem;
+  margin-top: 0.4rem;
+  opacity: 0.85;
+}
 
 /* Übersicht: Akku und Reichweite groß oben */
 .hero-stats {

@@ -104,6 +104,6 @@ describe("Zusammenfassungen", () => {
     expect(tableToTxt(chargingSessionsTable("V1", 2026, sessions, TZ))).toContain("lädt noch");
     const rows = chargingSessionsTable("V1", 2026, sessions, TZ).rows;
     expect(rows[0].slice(0, 4)).toEqual(["05.01.2026", "23:00", "04:30", "5:30 h"]);
-    expect(rows[0][18]).toBe("Geschäftlich");
+    expect(rows[0][20]).toBe("Geschäftlich");
   });
 });
