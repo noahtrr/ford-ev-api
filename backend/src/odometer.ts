@@ -11,8 +11,11 @@ export const TRIP_CATEGORIES: TripCategory[] = ["private", "business"];
 
 /** Ein gespeicherter Kilometerstand mit Zeitpunkt (ISO-Zeit von Ford). */
 export interface OdometerReading {
+  /** Wann Ford diesen Kilometerstand gemessen hat. */
   ts: string;
   km: number;
+  /** Kennung zum Markieren (Zeitpunkt des gespeicherten Messwerts). Fehlt sie, gilt ts. */
+  id?: string;
   /**
    * Markierung für die Strecke, die seit dem vorherigen Messwert gefahren wurde.
    * null oder fehlend = nicht markiert.
@@ -22,6 +25,8 @@ export interface OdometerReading {
 
 /** Ein einzelner Messwert eines Tages, so wie er in der aufgeklappten Tagesansicht steht. */
 export interface DayReading {
+  /** Kennung zum Markieren über PUT /api/odometer/category. */
+  id: string;
   ts: string;
   km: number;
   /** Gefahrene km seit dem vorherigen Messwert (auch wenn der am Vortag war). */
@@ -139,7 +144,7 @@ function categoryKm(list: { segmentKm: number; category?: TripCategory | null }[
 export function dayReadings(readings: OdometerReading[], date: string, timeZone: string): DayReading[] {
   return withSegments(readings)
     .filter((r) => periodKey(r.ts, "day", timeZone) === date)
-    .map((r) => ({ ts: r.ts, km: r.km, distanceKm: round(r.segmentKm), category: r.category ?? null }));
+    .map((r) => ({ id: r.id ?? r.ts, ts: r.ts, km: r.km, distanceKm: round(r.segmentKm), category: r.category ?? null }));
 }
 
 /**

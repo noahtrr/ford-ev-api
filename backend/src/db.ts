@@ -173,15 +173,29 @@ export class Store {
     });
   }
 
-  /** Alle gespeicherten Kilometerstände eines Autos mit Markierung privat/geschäftlich, älteste zuerst. */
+  /**
+   * Alle Kilometerstände eines Autos mit Markierung privat/geschäftlich, älteste zuerst.
+   * Ein Messwert wird gespeichert, sobald sich irgendein Wert ändert (z. B. Akku beim Laden).
+   * Der Kilometerstand darin kann dann noch der alte sein. Deshalb zählt hier nur, wann Ford
+   * den Kilometerstand selbst geliefert hat (odometer.updateTime), jeder Zeitpunkt nur einmal.
+   */
   odometerReadings(vin: string): OdometerReading[] {
-    return this.db
+    const rows = this.db
       .prepare(
-        `SELECT s.ts, s.odometer_km AS km, c.category
+        `SELECT s.ts AS id, COALESCE(json_extract(s.raw, '$.metrics.odometer.updateTime'), s.ts) AS ts,
+                s.odometer_km AS km, c.category
          FROM snapshots s LEFT JOIN trip_categories c ON c.vin = s.vin AND c.ts = s.ts
          WHERE s.vin = ? AND s.odometer_km IS NOT NULL ORDER BY s.ts`,
       )
-      .all(vin) as unknown as OdometerReading[];
+      .all(vin) as unknown as Required<OdometerReading>[];
+    const byTime = new Map<string, Required<OdometerReading>>();
+    for (const r of rows) {
+      const first = byTime.get(r.ts);
+      if (!first) byTime.set(r.ts, r);
+      // Markierungen hängen am ersten Messwert; ältere an späteren Kopien gehen nicht verloren.
+      else if (!first.category && r.category) first.category = r.category;
+    }
+    return [...byTime.values()];
   }
 
   /**
@@ -189,18 +203,23 @@ export class Store {
    * null entfernt die Markierung. Gibt zurück, wie viele Messwerte es davon wirklich gibt.
    */
   setTripCategory(vin: string, ts: string[], category: TripCategory | null): number {
-    const exists = this.db.prepare("SELECT 1 FROM snapshots WHERE vin = ? AND ts = ? AND odometer_km IS NOT NULL");
+    const odometerTime = "COALESCE(json_extract(raw, '$.metrics.odometer.updateTime'), ts)";
+    const find = this.db.prepare(`SELECT ${odometerTime} AS t FROM snapshots WHERE vin = ? AND ts = ? AND odometer_km IS NOT NULL`);
     const upsert = this.db.prepare(
       "INSERT INTO trip_categories (vin, ts, category) VALUES (?, ?, ?) ON CONFLICT(vin, ts) DO UPDATE SET category = excluded.category",
     );
-    const remove = this.db.prepare("DELETE FROM trip_categories WHERE vin = ? AND ts = ?");
+    // Alte Markierungen an Kopien mit demselben Kilometerstand-Zeitpunkt entfernen (siehe odometerReadings).
+    const removeCopies = this.db.prepare(
+      `DELETE FROM trip_categories WHERE vin = ? AND ts IN (SELECT ts FROM snapshots WHERE vin = ? AND ${odometerTime} = ?)`,
+    );
     let count = 0;
     this.db.exec("BEGIN");
     try {
       for (const t of ts) {
-        if (!exists.get(vin, t)) continue;
+        const row = find.get(vin, t) as { t: string } | undefined;
+        if (!row) continue;
+        removeCopies.run(vin, vin, row.t);
         if (category) upsert.run(vin, t, category);
-        else remove.run(vin, t);
         count++;
       }
       this.db.exec("COMMIT");

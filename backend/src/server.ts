@@ -171,7 +171,7 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
           tags: ["Kilometerstand"],
           summary: "Alle Messwerte eines Tages mit Uhrzeit",
           description:
-            "Für die aufgeklappte Tagesansicht: jeder Messwert mit Zeitpunkt, Kilometerstand, gefahrenen km seit dem vorherigen Messwert und der Markierung privat/geschäftlich. Älteste zuerst.",
+            "Für die aufgeklappte Tagesansicht: jeder Zeitpunkt, zu dem Ford einen Kilometerstand geliefert hat, mit Kilometerstand, gefahrenen km seit dem vorherigen Messwert und der Markierung privat/geschäftlich. Älteste zuerst.",
           querystring: {
             type: "object",
             required: ["date"],
@@ -192,7 +192,7 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
           tags: ["Kilometerstand"],
           summary: "Fahrten als privat oder geschäftlich markieren",
           description:
-            "Markiert die Strecke bis zu den angegebenen Messwerten (Zeitpunkte aus /api/odometer/day). category null entfernt die Markierung.",
+            "Markiert die Strecke bis zu den angegebenen Messwerten (Feld id aus /api/odometer/day). category null entfernt die Markierung.",
           body: {
             type: "object",
             required: ["ts", "category"],
