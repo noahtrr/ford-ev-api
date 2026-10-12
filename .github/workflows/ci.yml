@@ -99,9 +99,7 @@ jobs:
     permissions:
       contents: read
       packages: read
-    environment:
-      name: production
-      url: https://ford.zenvmc.de
+    environment: production
     # Nie zwei Deploys gleichzeitig; ein laufender wird nicht abgebrochen.
     concurrency:
       group: deploy

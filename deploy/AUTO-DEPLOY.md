@@ -11,14 +11,16 @@ Bei Pull Requests laufen nur Schritt 1 und 2, es wird nichts deployt.
 
 Solange die Secrets unten fehlen, wird Schritt 4 einfach übersprungen (gelbe Warnung, kein Fehler).
 
-Du brauchst das nur **einmal** zu machen, nachdem diese Änderung auf `main` ist. Dauer: etwa 10 Minuten.
+**Am einfachsten:** `sudo bash deploy/setup.sh` fragt am Ende „Automatische Updates über GitHub … Jetzt einrichten?“. Mit `j` erledigt es die Schritte 2, 3 und 5 und zeigt dir die vier Werte für Schritt 4. Du musst sie dann nur noch bei GitHub eintragen (Schritt 4) und ausprobieren (Schritt 6).
+
+Die Schritte unten sind dasselbe von Hand, falls du den Server schon früher eingerichtet hast.
 
 ---
 
 ## Schritt 1: Auf dem Server einloggen
 
 ```bash
-ssh ubuntu@ford.zenvmc.de
+ssh ubuntu@DEINE-DOMAIN
 cd ~/ford-ev-api
 git pull
 ```
@@ -32,7 +34,7 @@ sudo usermod -aG docker ubuntu
 sudo chown ubuntu: .env deploy/caddy.env
 ```
 
-Danach **einmal ausloggen und wieder einloggen** (`exit`, dann wieder `ssh ubuntu@ford.zenvmc.de`), damit die neue Gruppe gilt. Test: `docker ps` muss ohne `sudo` funktionieren.
+Danach **einmal ausloggen und wieder einloggen** (`exit`, dann wieder `ssh ubuntu@DEINE-DOMAIN`), damit die neue Gruppe gilt. Test: `docker ps` muss ohne `sudo` funktionieren.
 
 ## Schritt 3: Einen Schlüssel nur für GitHub anlegen
 
@@ -61,7 +63,7 @@ Auf GitHub: **Repo → Settings → Secrets and variables → Actions → New re
 
 | Name | Wert |
 | --- | --- |
-| `DEPLOY_HOST` | `ford.zenvmc.de` |
+| `DEPLOY_HOST` | deine Domain, z. B. `ford.example.de` |
 | `DEPLOY_USER` | `ubuntu` |
 | `DEPLOY_SSH_KEY` | der private Schlüssel aus Schritt 3 (der ganze Block) |
 | `DEPLOY_HOST_KEY` | die `ssh-ed25519 …`-Zeile aus Schritt 3 |
