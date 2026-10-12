@@ -394,14 +394,18 @@ function Header({ path }: { path: string }) {
   const [open, setOpen] = useState(false);
   // Nach einem Klick auf eine Seite das Menü wieder schließen.
   useEffect(() => setOpen(false), [path]);
+  // Menü und Abdunklung liegen bewusst außerhalb der Kopfzeile: deren
+  // backdrop-filter würde sonst "position: fixed" auf die Kopfzeilenhöhe begrenzen.
   return (
-    <header className="topbar">
-      <button className="hamburger" aria-label="Menü" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span />
-        <span />
-        <span />
-      </button>
-      <span className="topbar-title">{PAGES.find((p) => p.path === path)?.label}</span>
+    <>
+      <header className="topbar">
+        <button className="hamburger" aria-label="Menü" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <span />
+          <span />
+          <span />
+        </button>
+        <span className="topbar-title">{PAGES.find((p) => p.path === path)?.label}</span>
+      </header>
       {open && <div className="menu-backdrop" onClick={() => setOpen(false)} />}
       <nav className={`menu${open ? " open" : ""}`} aria-hidden={!open}>
         {PAGES.map((p) => (
@@ -413,7 +417,7 @@ function Header({ path }: { path: string }) {
           API-Endpunkte (Swagger)
         </a>
       </nav>
-    </header>
+    </>
   );
 }
 
