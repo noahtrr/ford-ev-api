@@ -811,6 +811,14 @@ h2 {
   margin-top: 0.4rem;
   opacity: 0.85;
 }
+/* Standort-Kachel in der Übersicht: über die ganze Breite, mit Kartenausschnitt */
+.position-tile {
+  grid-column: 1 / -1;
+  align-items: stretch;
+}
+.position-tile .map-frame {
+  margin-top: 0.4rem;
+}
 
 /* Übersicht: Akku und Reichweite groß oben */
 .hero-stats {

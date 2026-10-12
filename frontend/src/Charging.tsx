@@ -2,7 +2,7 @@
 // und Export (Jahresübersicht und einzelne Ladevorgänge als CSV, Excel und TXT).
 // Ford meldet keine fertigen Ladevorgänge, das Backend leitet sie aus Ladestand, Kabel und Ladestatus ab.
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { CATEGORY_LABELS, ExportButtons, MONTHS, PageTabs, PeriodTabs, VinSelect, hours, km, mapsUrl, num, periodLabel, type Category, type Period } from "./common";
+import { CATEGORY_LABELS, ExportButtons, MONTHS, PageTabs, PeriodTabs, VinSelect, hours, km, MapFrame, mapsUrl, num, periodLabel, type Category, type Period } from "./common";
 
 interface Totals {
   sessions: number;
@@ -106,9 +106,7 @@ function LocationSnapshot({ lat, lon, savedAt }: { lat: number; lon: number; sav
   const url = mapsUrl(lat, lon);
   return (
     <div className="location-snapshot">
-      <a className="map-frame" href={url} target="_blank" rel="noopener noreferrer" aria-label="Ladeort in Google Maps öffnen">
-        <iframe title="Kartenausschnitt vom Ladeort" src={`https://maps.google.com/maps?q=${lat},${lon}&z=16&output=embed`} loading="lazy" tabIndex={-1} />
-      </a>
+      <MapFrame lat={lat} lon={lon} label="Ladeort" />
       <div className="location-meta">
         <span>
           {lat.toFixed(5)}, {lon.toFixed(5)}

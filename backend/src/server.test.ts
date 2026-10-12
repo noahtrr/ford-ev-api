@@ -241,4 +241,32 @@ describe("server", () => {
     const csv = await app.inject("/api/charging/year/export?year=2026&format=csv&type=sessions");
     expect(csv.body).toContain("Hauptstraße 5, 10115 Berlin;https://www.google.com/maps/search/?api=1&query=52.5,13.4");
   });
+
+  it("zeigt zum aktuellen Standort den Ortsnamen und schlägt jede Stelle nur einmal nach", async () => {
+    let store!: Store;
+    const position = (ts: string, lat: number) =>
+      store.saveSnapshot(
+        parseTelemetry({ vin: "V1", metrics: { position: { value: { location: { lat, lon: 13.4 } }, updateTime: ts } } })[0],
+      );
+    const lookups: number[] = [];
+    const app = setup(
+      (s) => {
+        store = s;
+        position("2026-01-10T16:00:00Z", 52.5);
+      },
+      async (lat) => {
+        lookups.push(lat);
+        return "Hauptstraße 5, 10115 Berlin";
+      },
+    );
+    // Beim ersten Abruf wird der Name erst nachgeschlagen.
+    expect((await app.inject("/api/snapshots/latest")).json()[0]).toMatchObject({ lat: 52.5, address: null });
+    await new Promise((r) => setTimeout(r, 10));
+    expect((await app.inject("/api/snapshots/latest")).json()[0]).toMatchObject({ address: "Hauptstraße 5, 10115 Berlin" });
+
+    // Ein paar Meter daneben (gleich gerundet) wird nicht neu nachgeschlagen.
+    position("2026-01-10T17:00:00Z", 52.50001);
+    expect((await app.inject("/api/snapshots/latest")).json()[0]).toMatchObject({ address: "Hauptstraße 5, 10115 Berlin" });
+    expect(lookups).toEqual([52.5]);
+  });
 });

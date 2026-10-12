@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { LOGGED_OUT, LoginPage, ProfilePage, type Me } from "./Account";
 import { ChargingPage } from "./Charging";
 import { OdometerPage } from "./Odometer";
-import { mapsUrl } from "./common";
+import { MapFrame, mapsUrl } from "./common";
 
 // Antwortet das Backend mit 401, ist die Anmeldung abgelaufen: dann zur Anmeldeseite.
 const originalFetch = window.fetch.bind(window);
@@ -32,6 +32,8 @@ interface Snapshot {
   odometerKm: number | null;
   lat: number | null;
   lon: number | null;
+  /** Ortsname zum Standort, null solange er noch nachgeschlagen wird (oder das Nachschlagen aus ist). */
+  address?: string | null;
   plugStatus: string | null;
   chargeStatus: string | null;
   departures: Departure[] | null;
@@ -129,15 +131,22 @@ function Battery12vTile({ battery }: { battery: Snapshot["battery12v"] }) {
   return <Tile title="12-V-Batterie" value={value} tone={value === null ? undefined : low ? "warn" : "ok"} />;
 }
 
-function PositionTile({ lat, lon }: { lat: number | null; lon: number | null }) {
+/** Standort wie bei den Ladevorgängen: Ortsname, Kartenausschnitt und Link zu Google Maps. Geht über die ganze Breite. */
+function PositionTile({ lat, lon, address }: { lat: number | null; lon: number | null; address: string | null }) {
   if (lat === null || lon === null) return <Tile title="Standort" value={null} />;
-  const url = mapsUrl(lat, lon);
+  const coords = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
   return (
-    <Tile title="Standort" value={`${lat.toFixed(5)}, ${lon.toFixed(5)}`}>
-      <a className="button small" href={url} target="_blank" rel="noopener noreferrer">
-        In Google Maps öffnen
-      </a>
-    </Tile>
+    <div className="tile position-tile">
+      <span className="tile-title">Standort</span>
+      <strong className="tile-value">{address ?? coords}</strong>
+      <MapFrame lat={lat} lon={lon} label="Standort" />
+      <div className="location-meta">
+        <span>{address && coords}</span>
+        <a className="button small" href={mapsUrl(lat, lon)} target="_blank" rel="noopener noreferrer">
+          In Google Maps öffnen
+        </a>
+      </div>
+    </div>
   );
 }
 
@@ -353,8 +362,8 @@ function OverviewPage() {
               <DoorsTile doors={s.doors ?? null} locked={s.locked ?? null} />
               <WindowsTile windows={s.windows ?? null} />
               <Battery12vTile battery={s.battery12v ?? null} />
-              <PositionTile lat={s.lat ?? null} lon={s.lon ?? null} />
               <AlarmTile alarm={s.alarm ?? null} />
+              <PositionTile lat={s.lat ?? null} lon={s.lon ?? null} address={s.address ?? null} />
             </div>
             <Departures departures={s.departures ?? null} />
             <small>Stand: {new Date(s.ts).toLocaleString("de-DE")}</small>
