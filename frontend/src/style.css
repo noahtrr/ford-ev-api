@@ -321,7 +321,91 @@ dd {
   border-radius: 0.3rem;
   background: #1f4e9c;
 }
+/* Aufklappbare Tage mit Uhrzeiten und Markierung privat/geschäftlich */
+.km-table tr.expandable {
+  cursor: pointer;
+}
+.expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.expand .arrow {
+  display: inline-block;
+  transition: transform 0.15s;
+  opacity: 0.6;
+}
+.expand[aria-expanded="true"] .arrow {
+  transform: rotate(90deg);
+}
+.km-table tr.details-row > td {
+  padding: 0.25rem 0 0.75rem 1.25rem;
+  white-space: normal;
+}
+.day-details .km-table th,
+.day-details .km-table td {
+  padding: 0.3rem 0.4rem;
+}
+.day-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.85rem;
+}
+.chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.day-details .km-table td:last-child {
+  white-space: normal;
+}
+.chip {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid #8886;
+  border-radius: 1rem;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.chip.private[aria-pressed="true"] {
+  background: #2e8b57;
+  border-color: #2e8b57;
+  color: white;
+}
+.chip.business[aria-pressed="true"] {
+  background: #1f4e9c;
+  border-color: #1f4e9c;
+  color: white;
+}
+.split {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+.split .cat {
+  display: block;
+}
+.cat.private {
+  color: #2e8b57;
+}
+.cat.business {
+  color: #4a7bd0;
+}
 @media (max-width: 480px) {
+  .km-table tr.details-row > td {
+    padding-left: 0.25rem;
+  }
   .km-table {
     font-size: 0.82rem;
   }

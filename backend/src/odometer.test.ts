@@ -1,6 +1,6 @@
 import { inflateRawSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { summarize, toCsv, toTxt, toXlsx, yearOverview, type OdometerReading } from "./odometer.js";
+import { dayReadings, summarize, toCsv, toTxt, toXlsx, yearOverview, type OdometerReading } from "./odometer.js";
 
 const TZ = "Europe/Berlin";
 const readings: OdometerReading[] = [
@@ -15,10 +15,10 @@ const readings: OdometerReading[] = [
 describe("summarize", () => {
   it("fasst nach Tagen in deutscher Zeit zusammen, neueste zuerst", () => {
     expect(summarize(readings, "day", TZ)).toEqual([
-      { period: "2026-03-02", startKm: 10_120, endKm: 11_000, distanceKm: 880, readings: 1 },
-      { period: "2026-01-07", startKm: 10_050.5, endKm: 10_120, distanceKm: 69.5, readings: 1 },
-      { period: "2026-01-05", startKm: 9_900, endKm: 10_050.5, distanceKm: 150.5, readings: 2 },
-      { period: "2025-12-30", startKm: 9_900, endKm: 9_900, distanceKm: 0, readings: 1 },
+      { period: "2026-03-02", startKm: 10_120, endKm: 11_000, distanceKm: 880, readings: 1, privateKm: 0, businessKm: 0 },
+      { period: "2026-01-07", startKm: 10_050.5, endKm: 10_120, distanceKm: 69.5, readings: 1, privateKm: 0, businessKm: 0 },
+      { period: "2026-01-05", startKm: 9_900, endKm: 10_050.5, distanceKm: 150.5, readings: 2, privateKm: 0, businessKm: 0 },
+      { period: "2025-12-30", startKm: 9_900, endKm: 9_900, distanceKm: 0, readings: 1, privateKm: 0, businessKm: 0 },
     ]);
   });
 
@@ -39,6 +39,34 @@ describe("summarize", () => {
   });
 });
 
+describe("privat und geschäftlich", () => {
+  // 08:00 kommt vom 30.12. (100 km), 18:00 von 08:00 (50,5 km), 7. Januar von 18:00 (69,5 km).
+  const marked: OdometerReading[] = readings.map((r) =>
+    r.ts === "2026-01-05T08:00:00Z" ? { ...r, category: "business" } : r.ts === "2026-01-06T23:30:00Z" ? { ...r, category: "private" } : r,
+  );
+
+  it("listet die Messwerte eines Tages mit Uhrzeit und km seit dem vorherigen Messwert", () => {
+    expect(dayReadings(marked, "2026-01-05", TZ)).toEqual([
+      { ts: "2026-01-05T08:00:00Z", km: 10_000, distanceKm: 100, category: "business" },
+      { ts: "2026-01-05T18:00:00Z", km: 10_050.5, distanceKm: 50.5, category: null },
+    ]);
+    expect(dayReadings(marked, "2026-01-06", TZ)).toEqual([]);
+  });
+
+  it("zählt markierte km je Zeitraum getrennt", () => {
+    expect(summarize(marked, "day", TZ).find((r) => r.period === "2026-01-05")).toMatchObject({ distanceKm: 150.5, businessKm: 100, privateKm: 0 });
+    expect(summarize(marked, "month", TZ).find((r) => r.period === "2026-01")).toMatchObject({ distanceKm: 220, businessKm: 100, privateKm: 69.5 });
+  });
+
+  it("zeigt privat und geschäftlich in Jahresübersicht und Export", () => {
+    const o = yearOverview("V1", marked, 2026, TZ, new Date("2026-04-15T12:00:00Z"));
+    expect(o.months[0]).toMatchObject({ privateKm: 69.5, businessKm: 100 });
+    expect(o.months[4]).toMatchObject({ privateKm: null, businessKm: null });
+    expect(o).toMatchObject({ totalPrivateKm: 69.5, totalBusinessKm: 100 });
+    expect(toCsv(o, TZ).split("\r\n")[1]).toMatch(/^Januar 2026;9900;10120;220;69,5;100;3;/);
+  });
+});
+
 describe("yearOverview", () => {
   const overview = yearOverview("V1", readings, 2026, TZ, new Date("2026-04-15T12:00:00Z"));
 
@@ -54,16 +82,16 @@ describe("yearOverview", () => {
 
   it("exportiert als CSV mit Semikolon und Dezimalkomma", () => {
     const lines = toCsv(overview, TZ).split("\r\n");
-    expect(lines[0]).toBe("\uFEFFMonat;Kilometerstand Monatsanfang;Kilometerstand Monatsende;Gefahrene km;Messwerte;Letzter Messwert");
-    expect(lines[1]).toMatch(/^Januar 2026;9900;10120;220;3;/);
-    expect(lines[5]).toBe("Mai 2026;;;;0;");
-    expect(lines[13]).toBe("Summe 2026;;;1100;4;");
+    expect(lines[0]).toBe("\uFEFFMonat;Kilometerstand Monatsanfang;Kilometerstand Monatsende;Gefahrene km;Davon privat km;Davon geschäftlich km;Messwerte;Letzter Messwert");
+    expect(lines[1]).toMatch(/^Januar 2026;9900;10120;220;0;0;3;/);
+    expect(lines[5]).toBe("Mai 2026;;;;;;0;");
+    expect(lines[13]).toBe("Summe 2026;;;1100;0;0;4;");
   });
 
   it("exportiert als Texttabelle", () => {
     const txt = toTxt(overview, TZ);
     expect(txt).toContain("Kilometerstand 2026 – Fahrzeug V1");
-    expect(txt).toMatch(/Januar 2026\s+9\.900\s+10\.120\s+220\s+3/);
+    expect(txt).toMatch(/Januar 2026\s+9\.900\s+10\.120\s+220\s+0\s+0\s+3/);
   });
 
   it("exportiert als Excel-Datei (ZIP mit Tabellenblatt)", () => {

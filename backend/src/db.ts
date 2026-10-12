@@ -6,7 +6,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Tokens } from "./ford/auth.js";
 import { parseGarage, type VehicleInfo } from "./ford/garage.js";
-import type { OdometerReading } from "./odometer.js";
+import type { OdometerReading, TripCategory } from "./odometer.js";
 import { parseBodyStatus, parseDepartureTimes, type VehicleSnapshot } from "./ford/telemetry.js";
 
 export interface Account {
@@ -70,6 +70,13 @@ export class Store {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         fetched_at TEXT NOT NULL,
         raw TEXT NOT NULL
+      );
+      -- Markierung privat/geschäftlich für die Strecke bis zu einem Messwert (vin + ts wie in snapshots).
+      CREATE TABLE IF NOT EXISTS trip_categories (
+        vin TEXT NOT NULL,
+        ts TEXT NOT NULL,
+        category TEXT NOT NULL CHECK (category IN ('private', 'business')),
+        PRIMARY KEY (vin, ts)
       );
       -- Das eine Konto für die Weboberfläche. Benutzername kommt aus LOGIN_USER.
       CREATE TABLE IF NOT EXISTS account (
@@ -166,11 +173,42 @@ export class Store {
     });
   }
 
-  /** Alle gespeicherten Kilometerstände eines Autos, älteste zuerst. */
+  /** Alle gespeicherten Kilometerstände eines Autos mit Markierung privat/geschäftlich, älteste zuerst. */
   odometerReadings(vin: string): OdometerReading[] {
     return this.db
-      .prepare("SELECT ts, odometer_km AS km FROM snapshots WHERE vin = ? AND odometer_km IS NOT NULL ORDER BY ts")
+      .prepare(
+        `SELECT s.ts, s.odometer_km AS km, c.category
+         FROM snapshots s LEFT JOIN trip_categories c ON c.vin = s.vin AND c.ts = s.ts
+         WHERE s.vin = ? AND s.odometer_km IS NOT NULL ORDER BY s.ts`,
+      )
       .all(vin) as unknown as OdometerReading[];
+  }
+
+  /**
+   * Markiert die Strecke bis zu den Messwerten mit den Zeitpunkten ts als privat oder geschäftlich.
+   * null entfernt die Markierung. Gibt zurück, wie viele Messwerte es davon wirklich gibt.
+   */
+  setTripCategory(vin: string, ts: string[], category: TripCategory | null): number {
+    const exists = this.db.prepare("SELECT 1 FROM snapshots WHERE vin = ? AND ts = ? AND odometer_km IS NOT NULL");
+    const upsert = this.db.prepare(
+      "INSERT INTO trip_categories (vin, ts, category) VALUES (?, ?, ?) ON CONFLICT(vin, ts) DO UPDATE SET category = excluded.category",
+    );
+    const remove = this.db.prepare("DELETE FROM trip_categories WHERE vin = ? AND ts = ?");
+    let count = 0;
+    this.db.exec("BEGIN");
+    try {
+      for (const t of ts) {
+        if (!exists.get(vin, t)) continue;
+        if (category) upsert.run(vin, t, category);
+        else remove.run(vin, t);
+        count++;
+      }
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
+    return count;
   }
 
   /** Die Fahrgestellnummern aller Autos, für die es Messwerte gibt. */
