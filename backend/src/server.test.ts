@@ -136,6 +136,25 @@ describe("server", () => {
     expect(bad.statusCode).toBe(400);
   });
 
+  it("zeigt nur Zeitpunkte, zu denen Ford den Kilometerstand wirklich geliefert hat", async () => {
+    const app = setup((store) => {
+      odometer(store, "2026-01-10T08:00:00Z", 1000);
+      // Beim Laden ändert sich nur der Akku, der Kilometerstand bleibt der von 08:00.
+      for (const ts of ["2026-01-10T12:00:00Z", "2026-01-10T13:00:00Z"]) {
+        const metrics = { odometer: { value: 1000, updateTime: "2026-01-10T08:00:00Z" }, xevBatteryStateOfCharge: { value: 50, updateTime: ts } };
+        store.saveSnapshot(parseTelemetry({ vin: "V1", metrics })[0]);
+      }
+      odometer(store, "2026-01-10T17:00:00Z", 1040);
+    });
+    const day = await app.inject("/api/odometer/day?date=2026-01-10");
+    const readings = day.json().readings as { id: string; ts: string }[];
+    expect(readings.map((r) => r.ts)).toEqual(["2026-01-10T08:00:00Z", "2026-01-10T17:00:00Z"]);
+
+    await app.inject({ method: "PUT", url: "/api/odometer/category", payload: { ts: [readings[1].id], category: "private" } });
+    const days = await app.inject("/api/odometer?period=day");
+    expect(days.json().rows[0]).toMatchObject({ distanceKm: 40, privateKm: 40, readings: 2 });
+  });
+
   it("meldet 404 für die Jahresübersicht, solange es keine Kilometerstände gibt", async () => {
     const res = await setup().inject("/api/odometer/year");
     expect(res.statusCode).toBe(404);

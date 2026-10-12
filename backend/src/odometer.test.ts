@@ -47,8 +47,8 @@ describe("privat und geschäftlich", () => {
 
   it("listet die Messwerte eines Tages mit Uhrzeit und km seit dem vorherigen Messwert", () => {
     expect(dayReadings(marked, "2026-01-05", TZ)).toEqual([
-      { ts: "2026-01-05T08:00:00Z", km: 10_000, distanceKm: 100, category: "business" },
-      { ts: "2026-01-05T18:00:00Z", km: 10_050.5, distanceKm: 50.5, category: null },
+      { id: "2026-01-05T08:00:00Z", ts: "2026-01-05T08:00:00Z", km: 10_000, distanceKm: 100, category: "business" },
+      { id: "2026-01-05T18:00:00Z", ts: "2026-01-05T18:00:00Z", km: 10_050.5, distanceKm: 50.5, category: null },
     ]);
     expect(dayReadings(marked, "2026-01-06", TZ)).toEqual([]);
   });

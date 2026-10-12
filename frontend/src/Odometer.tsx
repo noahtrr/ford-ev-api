@@ -16,6 +16,9 @@ interface PeriodRow {
 
 /** Ein Messwert in der aufgeklappten Tagesansicht. */
 interface DayReading {
+  /** Kennung zum Markieren. */
+  id: string;
+  /** Wann Ford den Kilometerstand geliefert hat. */
   ts: string;
   km: number;
   /** Gefahrene km seit dem vorherigen Messwert. */
@@ -137,13 +140,13 @@ function DayDetails({ vin, date, onChanged }: { vin: string | null; date: string
       {driven.length > 0 && (
         <div className="day-actions">
           <span>Ganzen Tag markieren:</span>
-          <button className="chip private" onClick={() => void mark(driven.map((r) => r.ts), "private")}>
+          <button className="chip private" onClick={() => void mark(driven.map((r) => r.id), "private")}>
             Privat
           </button>
-          <button className="chip business" onClick={() => void mark(driven.map((r) => r.ts), "business")}>
+          <button className="chip business" onClick={() => void mark(driven.map((r) => r.id), "business")}>
             Geschäftlich
           </button>
-          <button className="chip" onClick={() => void mark(driven.filter((r) => r.category).map((r) => r.ts), null)}>
+          <button className="chip" onClick={() => void mark(driven.filter((r) => r.category).map((r) => r.id), null)}>
             Zurücksetzen
           </button>
         </div>
@@ -160,7 +163,7 @@ function DayDetails({ vin, date, onChanged }: { vin: string | null; date: string
         </thead>
         <tbody>
           {readings.map((r) => (
-            <tr key={r.ts} className={r.category ?? undefined}>
+            <tr key={r.id} className={r.category ?? undefined}>
               <td>{time(r.ts)} Uhr</td>
               <td className="num">{km(r.km)}</td>
               <td className="num">{r.distanceKm > 0 ? `+${km(r.distanceKm)}` : "–"}</td>
@@ -173,7 +176,7 @@ function DayDetails({ vin, date, onChanged }: { vin: string | null; date: string
                         className={`chip ${c}`}
                         aria-pressed={r.category === c}
                         // Nochmal auf die gewählte Markierung tippen entfernt sie wieder.
-                        onClick={() => void mark([r.ts], r.category === c ? null : c)}
+                        onClick={() => void mark([r.id], r.category === c ? null : c)}
                       >
                         {CATEGORY_LABELS[c]}
                       </button>
