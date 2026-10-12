@@ -129,42 +129,45 @@ dd {
   fill: #000;
   opacity: 0.35;
 }
-.car-drawing .body {
-  fill: #c9d3e3;
-}
 .car-drawing .glass {
-  fill: #1b2435;
+  fill: #10151f;
 }
-.car-drawing .pillar {
-  stroke: #0b0f17;
-  stroke-width: 5;
+.car-drawing .pane {
+  fill: #2a3950;
 }
-.car-drawing .trim {
-  stroke: #94a0b5;
+.car-drawing .louvre {
+  stroke: #56677f;
   stroke-width: 1.5;
+}
+.car-drawing .crease {
+  fill: none;
+  stroke: #ffffff59;
+}
+.car-drawing .seam {
+  fill: none;
+  stroke: #6f88a0;
+}
+.car-drawing .handle {
+  stroke: #e8f0f7;
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 .car-drawing .headlight {
   stroke: #fff;
-  stroke-width: 3;
+  stroke-width: 2.5;
   stroke-linecap: round;
 }
 .car-drawing .taillight {
-  fill: none;
   stroke: var(--danger);
-  stroke-width: 3;
+  stroke-width: 1.8;
   stroke-linecap: round;
 }
-.car-drawing .arch {
-  fill: var(--surface);
-}
-.car-drawing .tire {
-  fill: #0b0f17;
-}
-.car-drawing .rim {
-  fill: #94a0b5;
+.car-drawing .clad {
+  fill: #161c28;
 }
 .car-drawing .port {
-  fill: #34425c;
+  fill: #9fb6cb;
+  stroke: #6f88a0;
 }
 .car-drawing.charging .port {
   fill: var(--ok);

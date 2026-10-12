@@ -158,35 +158,56 @@ function AlarmTile({ alarm }: { alarm: string | null }) {
 /** Ein gezeichneter Ford Explorer von der Seite. Beim Laden steht er an einer Ladesäule und Strom fließt ins Auto. */
 function CarDrawing({ charging }: { charging: boolean }) {
   return (
-    <svg viewBox="0 0 320 112" className={`car-drawing${charging ? " charging" : ""}`} aria-hidden="true">
-      <ellipse cx="146" cy="101" rx="130" ry="5" className="shadow" />
-      {/* Karosserie: kurze Haube, steile Front, flaches Dach, steiles Heck */}
+    <svg viewBox="0 0 352 124" className={`car-drawing${charging ? " charging" : ""}`} aria-hidden="true">
+      <defs>
+        <linearGradient id="explorer-paint" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#c2d9ec" />
+          <stop offset="1" stopColor="#7c9fbe" />
+        </linearGradient>
+        {/* Felge: heller Ring mit schwarzem Stern, wie am Explorer */}
+        <g id="explorer-wheel">
+          {/* Farben direkt hier, weil CSS nicht in <use>-Kopien greift */}
+          <circle r="22" fill="#0b0f17" />
+          <circle r="16" fill="#c9d3e3" />
+          <polygon
+            points="0,-15 4.1,-5.7 14.3,-4.6 6.7,2.2 8.8,12.1 0,7 -8.8,12.1 -6.7,2.2 -14.3,-4.6 -4.1,-5.7"
+            fill="#1b2230"
+          />
+          <circle r="3.5" fill="#56677f" />
+        </g>
+      </defs>
+      <ellipse cx="200" cy="118" rx="150" ry="4" className="shadow" />
+      {/* Karosserie, Front rechts: kurze hohe Haube, steile Scheibe, flaches Dach mit Spoiler, steiles Heck */}
       <path
-        className="body"
-        d="M18 90 L17 74 C17 68 21 64 30 62 L84 54 L112 32 C115 29 119 28 124 28 L232 27 C238 27 242 29 245 33 L262 52 C266 55 268 60 268 66 L269 90 Z"
+        fill="url(#explorer-paint)"
+        d="M56 100 L54 70 C54 58 57 50 62 44 L66 31 C68 27 74 26 84 25 L226 24 C236 25 242 30 250 38 L276 56 L326 64 C336 66 342 72 343 80 L344 100 Z"
       />
-      {/* Fenster mit schwarzen Säulen, wie beim Explorer */}
-      <path className="glass" d="M92 54 L116 35 C118 33 121 32 124 32 L230 31 C235 31 238 33 240 36 L252 54 Z" />
-      <path className="pillar" d="M150 32 L148 54 M196 31 L198 54" />
-      <path className="trim" d="M30 70 L262 66" />
-      <path className="headlight" d="M20 68 L42 64" />
-      <path className="taillight" d="M264 60 L265 70" />
-      {/* Radhäuser und Räder */}
-      <circle cx="70" cy="90" r="21" className="arch" />
-      <circle cx="222" cy="90" r="21" className="arch" />
-      <circle cx="70" cy="90" r="16" className="tire" />
-      <circle cx="222" cy="90" r="16" className="tire" />
-      <circle cx="70" cy="90" r="8" className="rim" />
-      <circle cx="222" cy="90" r="8" className="rim" />
+      <path className="glass" d="M70 54 L76 35 C78 31 82 29 88 29 L222 28 C230 29 236 33 242 40 L260 54 Z" />
+      <path className="pane" d="M124 33 L186 31 L186 51 L124 51 Z M194 31 L222 32 C229 33 234 36 239 41 L251 51 L194 51 Z" />
+      {/* Lamellen an der C-Säule */}
+      <path className="louvre" d="M86 36 L118 35 M84 40 L118 39.5 M82 44 L118 44 M80 48 L118 48" />
+      <path className="glass" d="M246 47 L256 44 L259 50 L249 52 Z" />
+      <path className="crease" d="M62 58 Q200 54 330 66" />
+      <path className="seam" d="M120 55 L120 92 M190 55 L191 92 M260 55 C264 70 264 84 262 92" />
+      <path className="handle" d="M138 61 L148 61 M206 61 L216 61" />
+      <path className="headlight" d="M326 67 L340 71" />
+      <rect x="58" y="50" width="8" height="22" rx="3" className="glass" />
+      <path className="taillight" d="M61 53 L61 69 M63.5 53 L63.5 65" />
+      {/* Schwarze Verkleidung unten und um die Radhäuser */}
+      <path className="clad" d="M58 92 L342 92 L344 100 Q344 104 340 104 L60 104 Q56 104 56 100 Z" />
+      <circle cx="85" cy="96" r="27" className="clad" />
+      <circle cx="292" cy="96" r="27" className="clad" />
+      <use href="#explorer-wheel" x="85" y="96" />
+      <use href="#explorer-wheel" x="292" y="96" />
       {/* Ladeklappe hinten an der Seite */}
-      <rect x="244" y="57" width="10" height="8" rx="2" className="port" />
+      <rect x="72" y="57" width="11" height="10" rx="3" className="port" />
       {charging && (
         <g className="charger">
-          <rect x="286" y="34" width="22" height="70" rx="4" className="post" />
-          <rect x="290" y="40" width="14" height="14" rx="2" className="screen" />
-          <path d="M298 42 L294 48 L298 48 L296 53 L301 46 L297 46 Z" className="bolt" />
-          <path d="M290 70 C280 104 254 96 250 64" className="cable" />
-          <path d="M290 70 C280 104 254 96 250 64" className="current" />
+          <rect x="6" y="40" width="24" height="78" rx="4" className="post" />
+          <rect x="10" y="46" width="16" height="16" rx="2" className="screen" />
+          <path d="M19 48 L14 55 L18 55 L16 61 L22 53 L18 53 Z" className="bolt" />
+          <path d="M28 80 C42 100 66 92 77 64" className="cable" />
+          <path d="M28 80 C42 100 66 92 77 64" className="current" />
         </g>
       )}
     </svg>
