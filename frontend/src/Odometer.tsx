@@ -1,8 +1,7 @@
-// Seiten zum Kilometerstand: Verlauf nach Tagen/Wochen/Monaten/Jahren und die Jahresübersicht.
+// Seite Kilometerstand mit zwei Reitern: Anzeige (Verlauf nach Tagen/Wochen/Monaten/Jahren)
+// und Export (Jahresübersicht mit CSV, Excel und TXT).
 import { Fragment, useCallback, useEffect, useState } from "react";
-
-type Period = "day" | "week" | "month" | "year";
-type Category = "private" | "business";
+import { CATEGORY_LABELS, ExportButtons, MONTHS, PageTabs, PeriodTabs, VinSelect, km, periodLabel, type Category, type Period } from "./common";
 
 interface PeriodRow {
   period: string;
@@ -26,8 +25,6 @@ interface DayReading {
   category: Category | null;
 }
 
-const CATEGORY_LABELS: Record<Category, string> = { private: "Privat", business: "Geschäftlich" };
-
 interface MonthRow {
   month: number;
   startKm: number | null;
@@ -48,36 +45,6 @@ interface YearOverview {
   totalKm: number | null;
   totalPrivateKm: number | null;
   totalBusinessKm: number | null;
-}
-
-const PERIOD_TABS: { id: Period; label: string }[] = [
-  { id: "day", label: "Tage" },
-  { id: "week", label: "Wochen" },
-  { id: "month", label: "Monate" },
-  { id: "year", label: "Jahre" },
-];
-
-const MONTHS = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
-
-function km(value: number | null): string {
-  return value === null ? "–" : `${value.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km`;
-}
-
-/** Macht aus "2026-10-11", "2026-W41", "2026-10" oder "2026" einen lesbaren Text. */
-function periodLabel(period: string, type: Period): string {
-  if (type === "day") {
-    const [y, m, d] = period.split("-").map(Number);
-    return new Date(y, m - 1, d).toLocaleDateString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
-  }
-  if (type === "week") {
-    const [y, w] = period.split("-W");
-    return `KW ${Number(w)} / ${y}`;
-  }
-  if (type === "month") {
-    const [y, m] = period.split("-").map(Number);
-    return `${MONTHS[m - 1]} ${y}`;
-  }
-  return period;
 }
 
 /** Kleine Zeile "privat 20 km · geschäftlich 30 km" unter den gefahrenen km. Leer, wenn nichts markiert ist. */
@@ -191,23 +158,8 @@ function DayDetails({ vin, date, onChanged }: { vin: string | null; date: string
   );
 }
 
-/** Auswahl, wenn es mehr als ein Auto gibt. */
-function VinSelect({ vins, vin, onChange }: { vins: string[]; vin: string | null; onChange: (vin: string) => void }) {
-  if (vins.length < 2) return null;
-  return (
-    <label className="field">
-      Fahrzeug{" "}
-      <select value={vin ?? ""} onChange={(e) => onChange(e.target.value)}>
-        {vins.map((v) => (
-          <option key={v}>{v}</option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-/** Seite "Kilometerstand": Verlauf mit Umschalter Tage/Wochen/Monate/Jahre. */
-export function OdometerHistoryPage() {
+/** Reiter "Anzeige": Verlauf mit Umschalter Tage/Wochen/Monate/Jahre. */
+function OdometerHistoryTab() {
   const [period, setPeriod] = useState<Period>("day");
   const [vin, setVin] = useState<string | null>(null);
   const [data, setData] = useState<{ vin: string | null; vins: string[]; rows: PeriodRow[] } | null>(null);
@@ -238,19 +190,12 @@ export function OdometerHistoryPage() {
 
   return (
     <>
-      <h1>Kilometerstand</h1>
       <p className="hint">
         Ford schickt nur Daten, wenn das Auto wach ist (fahren oder laden). Zeiträume ohne Messwert fehlen deshalb hier.
         {period === "day" && " Tippe auf einen Tag, um die Uhrzeiten zu sehen und Fahrten als privat oder geschäftlich zu markieren."}
       </p>
       <VinSelect vins={data?.vins ?? []} vin={data?.vin ?? null} onChange={setVin} />
-      <div className="tabs" role="tablist">
-        {PERIOD_TABS.map((t) => (
-          <button key={t.id} role="tab" aria-selected={period === t.id} className={period === t.id ? "active" : undefined} onClick={() => setPeriod(t.id)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <PeriodTabs period={period} onChange={setPeriod} />
       {data === null ? (
         <p>Lade…</p>
       ) : rows.length === 0 ? (
@@ -322,8 +267,8 @@ export function OdometerHistoryPage() {
   );
 }
 
-/** Seite "Jahresübersicht": 12 Monate mit Export als CSV, TXT und Excel. */
-export function YearOverviewPage() {
+/** Reiter "Export": Jahresübersicht mit 12 Monaten und Export als CSV, TXT und Excel. */
+function YearOverviewTab() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [vin, setVin] = useState<string | null>(null);
   const [data, setData] = useState<YearOverview | null | "empty">(null);
@@ -335,20 +280,13 @@ export function YearOverviewPage() {
   }, [year, vin]);
 
   if (data === null) return <p>Lade…</p>;
-  if (data === "empty") {
-    return (
-      <>
-        <h1>Jahresübersicht</h1>
-        <p>Noch keine Kilometerstände gespeichert.</p>
-      </>
-    );
-  }
+  if (data === "empty") return <p>Noch keine Kilometerstände gespeichert.</p>;
 
   const exportUrl = (format: string) => `/api/odometer/year/export?${new URLSearchParams({ vin: data.vin, year: String(year), format })}`;
 
   return (
     <>
-      <h1>Jahresübersicht {year}</h1>
+      <h2>Jahresübersicht {year}</h2>
       <p className="hint">
         Kilometerstand am Anfang und Ende jedes Monats, z. B. für eine Jahresabrechnung. Gab es in einem Monat keinen Messwert, gilt der
         letzte bekannte Stand.
@@ -363,18 +301,7 @@ export function YearOverviewPage() {
           </select>
         </label>
         <VinSelect vins={data.vins} vin={data.vin} onChange={setVin} />
-        <div className="export">
-          <span>Exportieren:</span>
-          <a className="button small" href={exportUrl("csv")} download>
-            CSV
-          </a>
-          <a className="button small" href={exportUrl("xlsx")} download>
-            Excel
-          </a>
-          <a className="button small" href={exportUrl("txt")} download>
-            TXT
-          </a>
-        </div>
+        <ExportButtons label="Exportieren:" url={exportUrl} />
       </div>
       <div className="table-wrap">
         <table className="km-table">
@@ -414,8 +341,25 @@ export function YearOverviewPage() {
       </div>
       <p className="hint">
         Grau = kein Messwert in diesem Monat, der Stand wurde übernommen. Privat und Geschäftlich zählen nur Fahrten, die du unter
-        Kilometerstand → Tage markiert hast. Der Rest ist nicht markiert.
+        Kilometerstand → Anzeige → Tage markiert hast. Der Rest ist nicht markiert.
       </p>
+    </>
+  );
+}
+
+const TABS = [
+  { id: "", label: "Anzeige" },
+  { id: "export", label: "Export" },
+];
+
+/** Seite "Kilometerstand": Anzeige und Export als Reiter. sub = Reiter aus der Adresse ("" oder "export"). */
+export function OdometerPage({ sub }: { sub: string }) {
+  const tab = sub === "export" ? "export" : "";
+  return (
+    <>
+      <h1>Kilometerstand</h1>
+      <PageTabs base="#/kilometerstand" tabs={TABS} active={tab} />
+      {tab === "export" ? <YearOverviewTab /> : <OdometerHistoryTab />}
     </>
   );
 }

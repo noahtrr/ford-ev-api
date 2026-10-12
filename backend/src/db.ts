@@ -6,8 +6,9 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Tokens } from "./ford/auth.js";
 import { parseGarage, type VehicleInfo } from "./ford/garage.js";
+import type { ChargingSample } from "./charging.js";
 import type { OdometerReading, TripCategory } from "./odometer.js";
-import { parseBodyStatus, parseDepartureTimes, type VehicleSnapshot } from "./ford/telemetry.js";
+import { parseBodyStatus, parseChargingDetails, parseDepartureTimes, type VehicleSnapshot } from "./ford/telemetry.js";
 
 export interface Account {
   webauthnUserId: string;
@@ -73,6 +74,13 @@ export class Store {
       );
       -- Markierung privat/geschäftlich für die Strecke bis zu einem Messwert (vin + ts wie in snapshots).
       CREATE TABLE IF NOT EXISTS trip_categories (
+        vin TEXT NOT NULL,
+        ts TEXT NOT NULL,
+        category TEXT NOT NULL CHECK (category IN ('private', 'business')),
+        PRIMARY KEY (vin, ts)
+      );
+      -- Markierung privat/geschäftlich für einen Ladevorgang (ts = erster Messwert des Ladevorgangs).
+      CREATE TABLE IF NOT EXISTS charging_categories (
         vin TEXT NOT NULL,
         ts TEXT NOT NULL,
         category TEXT NOT NULL CHECK (category IN ('private', 'business')),
@@ -220,6 +228,56 @@ export class Store {
         if (!row) continue;
         removeCopies.run(vin, vin, row.t);
         if (category) upsert.run(vin, t, category);
+        count++;
+      }
+      this.db.exec("COMMIT");
+    } catch (err) {
+      this.db.exec("ROLLBACK");
+      throw err;
+    }
+    return count;
+  }
+
+  /**
+   * Alle Messwerte eines Autos mit den Werten, aus denen die Ladevorgänge abgeleitet werden,
+   * älteste zuerst. Ladeart, Zeit bis voll und Energie stehen nur in der gespeicherten Ford-Antwort.
+   */
+  chargingSamples(vin: string): ChargingSample[] {
+    const rows = this.db
+      .prepare(
+        `SELECT s.ts, s.soc_pct, s.range_km, s.odometer_km, s.lat, s.lon, s.plug_status, s.charge_status, s.raw, c.category
+         FROM snapshots s LEFT JOIN charging_categories c ON c.vin = s.vin AND c.ts = s.ts
+         WHERE s.vin = ? ORDER BY s.ts`,
+      )
+      .all(vin) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      ts: r.ts as string,
+      socPct: r.soc_pct as number | null,
+      rangeKm: r.range_km as number | null,
+      odometerKm: r.odometer_km as number | null,
+      lat: r.lat as number | null,
+      lon: r.lon as number | null,
+      plugStatus: r.plug_status as string | null,
+      chargeStatus: r.charge_status as string | null,
+      ...parseChargingDetails((JSON.parse(r.raw as string) as { metrics?: unknown }).metrics),
+      category: (r.category as TripCategory | null) ?? null,
+    }));
+  }
+
+  /** Markiert Ladevorgänge (Kennung = erster Messwert) als privat oder geschäftlich, null entfernt die Markierung. */
+  setChargingCategory(vin: string, ids: string[], category: TripCategory | null): number {
+    const exists = this.db.prepare("SELECT 1 FROM snapshots WHERE vin = ? AND ts = ?");
+    const upsert = this.db.prepare(
+      "INSERT INTO charging_categories (vin, ts, category) VALUES (?, ?, ?) ON CONFLICT(vin, ts) DO UPDATE SET category = excluded.category",
+    );
+    const remove = this.db.prepare("DELETE FROM charging_categories WHERE vin = ? AND ts = ?");
+    let count = 0;
+    this.db.exec("BEGIN");
+    try {
+      for (const id of ids) {
+        if (!exists.get(vin, id)) continue;
+        if (category) upsert.run(vin, id, category);
+        else remove.run(vin, id);
         count++;
       }
       this.db.exec("COMMIT");

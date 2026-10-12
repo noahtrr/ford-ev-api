@@ -1,4 +1,4 @@
-import { buildXlsx } from "./xlsx.js";
+import { tableToCsv, tableToTxt, tableToXlsx, type ExportTable } from "./export.js";
 
 // Rechnet aus den gespeicherten Kilometerständen Übersichten nach Tagen, Wochen,
 // Monaten und Jahren, plus die Jahresübersicht mit 12 Monaten (z. B. für Abrechnungen).
@@ -80,7 +80,7 @@ export interface YearOverview {
 }
 
 /** Datum in der eingestellten Zeitzone (z. B. Europe/Berlin), nicht in der Zeitzone des Servers. */
-function localDate(ts: string, timeZone: string): { year: number; month: number; day: number } {
+export function localDate(ts: string, timeZone: string): { year: number; month: number; day: number } {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(
     new Date(ts),
   );
@@ -88,7 +88,7 @@ function localDate(ts: string, timeZone: string): { year: number; month: number;
   return { year: get("year"), month: get("month"), day: get("day") };
 }
 
-const pad = (n: number) => String(n).padStart(2, "0");
+export const pad = (n: number) => String(n).padStart(2, "0");
 
 /** Kalenderwoche nach ISO 8601 (Woche beginnt am Montag, so wie in Deutschland üblich). */
 function isoWeek(year: number, month: number, day: number): string {
@@ -103,7 +103,7 @@ function isoWeek(year: number, month: number, day: number): string {
   return `${weekYear}-W${pad(week)}`;
 }
 
-function periodKey(ts: string, period: Period, timeZone: string): string {
+export function periodKey(ts: string, period: Period, timeZone: string): string {
   const { year, month, day } = localDate(ts, timeZone);
   if (period === "day") return `${year}-${pad(month)}-${pad(day)}`;
   if (period === "week") return isoWeek(year, month, day);
@@ -259,8 +259,8 @@ const COLUMNS = [
   "Letzter Messwert",
 ];
 
-/** Die Tabelle der Jahresübersicht als Zeilen, so wie sie in CSV, TXT und Excel landet. */
-export function overviewTable(o: YearOverview, timeZone: string): { header: string[]; rows: (string | number | null)[][]; total: (string | number | null)[] } {
+/** Die Tabelle der Jahresübersicht, so wie sie in CSV, TXT und Excel landet. */
+export function overviewTable(o: YearOverview, timeZone: string): ExportTable {
   const dateTime = new Intl.DateTimeFormat("de-DE", { timeZone, dateStyle: "medium", timeStyle: "short" });
   const rows = o.months.map((m) => [
     `${MONTH_NAMES[m.month - 1]} ${o.year}`,
@@ -272,48 +272,15 @@ export function overviewTable(o: YearOverview, timeZone: string): { header: stri
     m.readings,
     m.lastReading ? dateTime.format(new Date(m.lastReading)) : null,
   ]);
-  return { header: COLUMNS, rows, total: [`Summe ${o.year}`, null, null, o.totalKm, o.totalPrivateKm, o.totalBusinessKm, o.months.reduce((s, m) => s + m.readings, 0), null] };
+  return {
+    title: `Kilometerstand ${o.year} – Fahrzeug ${o.vin}`,
+    sheetName: `Kilometerstand ${o.year}`,
+    header: COLUMNS,
+    rows,
+    total: [`Summe ${o.year}`, null, null, o.totalKm, o.totalPrivateKm, o.totalBusinessKm, o.months.reduce((s, m) => s + m.readings, 0), null],
+  };
 }
 
-/** Zahl im deutschen Format mit Komma, ohne Tausenderpunkt (lässt sich in Excel weiterrechnen). */
-function germanNumber(v: string | number | null): string {
-  if (v === null) return "";
-  return typeof v === "number" ? String(v).replace(".", ",") : v;
-}
-
-/** CSV mit Semikolon, so öffnet deutsches Excel die Datei direkt in Spalten. */
-export function toCsv(o: YearOverview, timeZone: string): string {
-  const { header, rows, total } = overviewTable(o, timeZone);
-  const quote = (s: string) => (/[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
-  const lines = [header, ...rows, total].map((line) => line.map((v) => quote(germanNumber(v))).join(";"));
-  // Das BOM am Anfang sorgt dafür, dass Excel Umlaute richtig anzeigt.
-  return "\uFEFF" + lines.join("\r\n") + "\r\n";
-}
-
-/** Gut lesbare Texttabelle mit festen Spaltenbreiten. */
-export function toTxt(o: YearOverview, timeZone: string): string {
-  const { header, rows, total } = overviewTable(o, timeZone);
-  const format = (v: string | number | null) =>
-    v === null ? "–" : typeof v === "number" ? v.toLocaleString("de-DE", { maximumFractionDigits: 1 }) : v;
-  const table = [header, ...rows.map((r) => r.map(format)), total.map((v) => (v === null ? "" : format(v)))];
-  const widths = header.map((_, i) => Math.max(...table.map((r) => String(r[i]).length)));
-  const line = (r: (string | number)[]) =>
-    r.map((v, i) => (i === 0 || i === r.length - 1 ? String(v).padEnd(widths[i]) : String(v).padStart(widths[i]))).join("  ").trimEnd();
-  const separator = widths.map((w) => "-".repeat(w)).join("  ");
-  return [
-    `Kilometerstand ${o.year} – Fahrzeug ${o.vin}`,
-    "",
-    line(table[0]),
-    separator,
-    ...table.slice(1, -1).map(line),
-    separator,
-    line(table[table.length - 1]),
-    "",
-  ].join("\r\n");
-}
-
-/** Excel-Datei: Überschrift und Summe fett, Zahlen als echte Zahlen zum Weiterrechnen. */
-export function toXlsx(o: YearOverview, timeZone: string): Buffer {
-  const { header, rows, total } = overviewTable(o, timeZone);
-  return buildXlsx(`Kilometerstand ${o.year}`, [header, ...rows, total], [0, rows.length + 1]);
-}
+export const toCsv = (o: YearOverview, timeZone: string) => tableToCsv(overviewTable(o, timeZone));
+export const toTxt = (o: YearOverview, timeZone: string) => tableToTxt(overviewTable(o, timeZone));
+export const toXlsx = (o: YearOverview, timeZone: string) => tableToXlsx(overviewTable(o, timeZone));
