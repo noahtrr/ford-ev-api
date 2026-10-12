@@ -116,5 +116,5 @@ Was wir beim Bauen gelernt haben, damit du es nicht nochmal herausfinden musst.
 
 - Zugangsdaten stehen nur in `.env` und `deploy/caddy.env`. Beide sind in `.gitignore` und dürfen nie committet werden.
 - Passwörter speichert die App nur als Hash, Sitzungs-Cookies nur als Hash. Nach 5 falschen Passwörtern ist der Login für diese IP 15 Minuten gesperrt.
-- Adressen zu Ladeorten und zum aktuellen Standort schlägt die App bei OpenStreetMap nach, dabei gehen die Koordinaten an Nominatim. Abschalten mit `REVERSE_GEOCODING=off` in `.env`.
+- Adressen zu Ladeorten und zum aktuellen Standort schlägt die App bei OpenStreetMap nach, dabei gehen die Koordinaten an Nominatim (und, falls Nominatim nicht antwortet, an Photon von komoot). Abschalten mit `REVERSE_GEOCODING=off` in `.env`.
 - Die E-Mail-Adresse in Git-Commits ist öffentlich sichtbar. Wer das nicht will, stellt bei GitHub unter Settings → Emails „Keep my email address private“ ein.
