@@ -1,6 +1,7 @@
 // Anmeldeseite (Passwort oder Passkey) und Profilseite mit den Kontoeinstellungen.
 import { browserSupportsWebAuthn, startAuthentication, startRegistration, WebAuthnError } from "@simplewebauthn/browser";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { CarDrawing } from "./common";
 
 /** Event, wenn die Anmeldung weg ist (abgemeldet oder Sitzung abgelaufen). App zeigt dann die Anmeldeseite. */
 export const LOGGED_OUT = "ford-logged-out";
@@ -97,16 +98,21 @@ function Message({ error, success }: { error?: string | null; success?: string |
   return null;
 }
 
-/** App-Symbol und Titel oben auf der Anmeldeseite. */
-function LoginBrand() {
+/** Linke Seite der Anmeldung: Titel und ein Explorer, der auf einer Straße fährt. */
+function LoginHero() {
   return (
-    <div className="login-brand">
-      <img src="/icon.svg" alt="" />
+    <section className="login-hero">
       <h1>Mein Ford</h1>
-      <p>Bitte melde dich an.</p>
-    </div>
+      <div className="road-scene">
+        <CarDrawing charging={false} />
+        <div className="road" />
+      </div>
+    </section>
   );
 }
+
+const LOGIN_INTRO =
+  "Akku, Reichweite, Ladevorgänge und Kilometerstand deines Ford Explorer an einem Ort – direkt von Ford, mit Fahrtenbuch und Export.";
 
 /** Anmeldeseite. Wird statt der App gezeigt, solange man nicht angemeldet ist. */
 export function LoginPage({ setupMissing, onLoggedIn }: { setupMissing: boolean; onLoggedIn: () => void }) {
@@ -114,20 +120,6 @@ export function LoginPage({ setupMissing, onLoggedIn }: { setupMissing: boolean;
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  if (setupMissing) {
-    return (
-      <div className="login-screen">
-        <main className="login">
-          <LoginBrand />
-          <p className="message error">
-            Der Login ist auf dem Server noch nicht eingerichtet: LOGIN_USER und LOGIN_HASH fehlen. Bis das erledigt ist, bleibt die App
-            gesperrt.
-          </p>
-        </main>
-      </div>
-    );
-  }
 
   const withPassword = async (e: FormEvent) => {
     e.preventDefault();
@@ -159,29 +151,36 @@ export function LoginPage({ setupMissing, onLoggedIn }: { setupMissing: boolean;
   return (
     <div className="login-screen">
       <main className="login">
-        <LoginBrand />
-        {browserSupportsWebAuthn() && (
-          <>
-            <button className="button wide" onClick={withPasskey} disabled={busy}>
-              Mit Passkey anmelden
-            </button>
-            <div className="divider">oder mit Passwort</div>
-          </>
-        )}
-        <form onSubmit={withPassword} className="form">
-          <label>
-            Benutzername
-            <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" required />
-          </label>
-          <label>
-            Passwort
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-          </label>
-          <button className="button wide secondary" type="submit" disabled={busy}>
-            Anmelden
-          </button>
-        </form>
-        <Message error={error} />
+        <LoginHero />
+        <section className="login-panel">
+          <p className="login-intro">{LOGIN_INTRO}</p>
+          {setupMissing ? (
+            <p className="message error">
+              Der Login ist auf dem Server noch nicht eingerichtet: LOGIN_USER und LOGIN_HASH fehlen. Bis das erledigt ist, bleibt die App
+              gesperrt.
+            </p>
+          ) : (
+            <form onSubmit={withPassword} className="form">
+              <label>
+                Benutzername
+                <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" required />
+              </label>
+              <label>
+                Passwort
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
+              </label>
+              {browserSupportsWebAuthn() && (
+                <button className="button wide secondary" type="button" onClick={withPasskey} disabled={busy}>
+                  Mit Passkey anmelden
+                </button>
+              )}
+              <button className="button wide" type="submit" disabled={busy}>
+                Anmelden
+              </button>
+            </form>
+          )}
+          <Message error={error} />
+        </section>
       </main>
     </div>
   );
