@@ -1,4 +1,7 @@
 // Bausteine, die Kilometerstand und Ladevorgänge gemeinsam nutzen.
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, Download, FileSpreadsheet, FileText } from "lucide-react";
+import { cssMs, Dropdown, ICON, Tabs } from "./ui";
 
 export type Period = "day" | "week" | "month" | "year";
 export type Category = "private" | "business";
@@ -60,32 +63,32 @@ export function periodLabel(period: string, type: Period): string {
   return period;
 }
 
-/** Auswahl, wenn es mehr als ein Auto gibt. */
-export function VinSelect({ vins, vin, onChange }: { vins: string[]; vin: string | null; onChange: (vin: string) => void }) {
-  if (vins.length < 2) return null;
+/** Native Auswahl im Stil des Design-Systems (auf dem Handy öffnet sich die System-Auswahl). */
+export function Select({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
   return (
-    <label className="field">
-      Fahrzeug{" "}
-      <select value={vin ?? ""} onChange={(e) => onChange(e.target.value)}>
-        {vins.map((v) => (
-          <option key={v}>{v}</option>
-        ))}
-      </select>
+    <label className="select-field">
+      {label}
+      <span className="select">
+        <select value={value} onChange={(e) => onChange(e.target.value)}>
+          {options.map((o) => (
+            <option key={o}>{o}</option>
+          ))}
+        </select>
+        <ChevronDown {...ICON} size={16} />
+      </span>
     </label>
   );
 }
 
+/** Auswahl, wenn es mehr als ein Auto gibt. */
+export function VinSelect({ vins, vin, onChange }: { vins: string[]; vin: string | null; onChange: (vin: string) => void }) {
+  if (vins.length < 2) return null;
+  return <Select label="Fahrzeug" value={vin ?? ""} options={vins} onChange={onChange} />;
+}
+
 /** Umschalter Tage/Wochen/Monate/Jahre. */
 export function PeriodTabs({ period, onChange }: { period: Period; onChange: (p: Period) => void }) {
-  return (
-    <div className="tabs" role="tablist">
-      {PERIOD_TABS.map((t) => (
-        <button key={t.id} role="tab" aria-selected={period === t.id} className={period === t.id ? "active" : undefined} onClick={() => onChange(t.id)}>
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
+  return <Tabs label="Zeitraum" items={PERIOD_TABS} active={period} onChange={(id) => onChange(id as Period)} />;
 }
 
 /**
@@ -93,32 +96,62 @@ export function PeriodTabs({ period, onChange }: { period: Period; onChange: (p:
  * (#/kilometerstand und #/kilometerstand/export), so bleibt er beim Neuladen offen.
  */
 export function PageTabs({ base, tabs, active }: { base: string; tabs: { id: string; label: string }[]; active: string }) {
+  return <Tabs label="Bereiche der Seite" items={tabs.map((t) => ({ ...t, href: t.id ? `${base}/${t.id}` : base }))} active={active} />;
+}
+
+/** Export als CSV, Excel oder TXT, in einem Menü. */
+export function ExportButtons({ label, url }: { label: string; url: (format: string) => string }) {
   return (
-    <nav className="page-tabs" aria-label="Bereiche der Seite">
-      {tabs.map((t) => (
-        <a key={t.id} href={t.id ? `${base}/${t.id}` : base} className={t.id === active ? "active" : undefined} aria-current={t.id === active ? "page" : undefined}>
-          {t.label}
-        </a>
-      ))}
-    </nav>
+    <Dropdown
+      label={label}
+      icon={Download}
+      small
+      items={[
+        { label: "CSV", href: url("csv"), download: true, icon: FileText },
+        { label: "Excel", href: url("xlsx"), download: true, icon: FileSpreadsheet },
+        { label: "TXT", href: url("txt"), download: true, icon: FileText },
+      ]}
+    />
   );
 }
 
-/** Export-Knöpfe CSV, Excel und TXT. */
-export function ExportButtons({ label, url }: { label: string; url: (format: string) => string }) {
+/** Aufklappender Bereich, der seinen Inhalt erst beim Öffnen lädt (Accordion expand, z. B. Tagesdetails). */
+export function Collapse({ open, children }: { open: boolean; children: ReactNode }) {
+  const [mounted, setMounted] = useState(open);
+  const [expanded, setExpanded] = useState(open);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (open) return setMounted(true);
+    setExpanded(false);
+    const t = setTimeout(() => setMounted(false), cssMs("--acc-collapse"));
+    return () => clearTimeout(t);
+  }, [open]);
+  // Erst geschlossen zeichnen, dann öffnen: so läuft das Aufklappen auch beim ersten Mal.
+  useLayoutEffect(() => {
+    if (!mounted || !open || expanded) return;
+    void box.current?.offsetWidth;
+    setExpanded(true);
+  }, [mounted, open, expanded]);
+  if (!mounted) return null;
   return (
-    <div className="export">
-      <span>{label}</span>
-      <a className="button small" href={url("csv")} download>
-        CSV
-      </a>
-      <a className="button small" href={url("xlsx")} download>
-        Excel
-      </a>
-      <a className="button small" href={url("txt")} download>
-        TXT
-      </a>
+    <div ref={box} className="t-acc" data-open={expanded}>
+      <div className="t-acc-panel">
+        <div className="t-acc-panel-inner">{children}</div>
+      </div>
     </div>
+  );
+}
+
+/** Pfeil für aufklappbare Zeilen, klappt beim Öffnen um (wie beim Akkordeon). */
+export function ExpandChevron({ open }: { open: boolean }) {
+  return (
+    <span className="t-acc" data-open={open}>
+      <span className="t-acc-chevron" aria-hidden="true">
+        <svg viewBox="0 0 16 16" width="16" height="16">
+          <path d="M4 6.5L8 10.5L12 6.5" />
+        </svg>
+      </span>
+    </span>
   );
 }
 
@@ -128,19 +161,19 @@ export function CarDrawing({ charging }: { charging: boolean }) {
     <svg viewBox="0 0 352 124" className={`car-drawing${charging ? " charging" : ""}`} aria-hidden="true">
       <defs>
         <linearGradient id="explorer-paint" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#c2d9ec" />
-          <stop offset="1" stopColor="#7c9fbe" />
+          <stop offset="0" style={{ stopColor: "var(--text)" }} />
+          <stop offset="1" style={{ stopColor: "var(--muted)" }} />
         </linearGradient>
-        {/* Felge: heller Ring mit schwarzem Stern, wie am Explorer */}
+        {/* Felge: heller Ring mit dunklem Stern, wie am Explorer */}
         <g id="explorer-wheel">
-          {/* Farben direkt hier, weil CSS nicht in <use>-Kopien greift */}
-          <circle r="22" fill="#0b0f17" />
-          <circle r="16" fill="#c9d3e3" />
+          {/* Farben inline, weil Klassen-Regeln nicht in <use>-Kopien greifen; Variablen schon */}
+          <circle r="22" style={{ fill: "var(--bg)" }} />
+          <circle r="16" style={{ fill: "var(--text-muted)" }} />
           <polygon
             points="0,-15 4.1,-5.7 14.3,-4.6 6.7,2.2 8.8,12.1 0,7 -8.8,12.1 -6.7,2.2 -14.3,-4.6 -4.1,-5.7"
-            fill="#1b2230"
+            style={{ fill: "var(--surface-2)" }}
           />
-          <circle r="3.5" fill="#56677f" />
+          <circle r="3.5" style={{ fill: "var(--muted)" }} />
         </g>
       </defs>
       <ellipse cx="200" cy="118" rx="150" ry="4" className="shadow" />

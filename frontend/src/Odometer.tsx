@@ -1,7 +1,8 @@
 // Seite Kilometerstand mit zwei Reitern: Anzeige (Verlauf nach Tagen/Wochen/Monaten/Jahren)
 // und Export (Jahresübersicht mit CSV, Excel und TXT).
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { CATEGORY_LABELS, ExportButtons, MONTHS, PageTabs, PeriodTabs, VinSelect, km, periodLabel, type Category, type Period } from "./common";
+import { CATEGORY_LABELS, Collapse, ExpandChevron, ExportButtons, Select, MONTHS, PageTabs, PeriodTabs, VinSelect, km, periodLabel, type Category, type Period } from "./common";
+import { ErrorMessage, Loading, Skeleton } from "./ui";
 
 interface PeriodRow {
   period: string;
@@ -97,7 +98,7 @@ function DayDetails({ vin, date, onChanged }: { vin: string | null; date: string
     }
   };
 
-  if (readings === null) return <p className="hint">Lade…</p>;
+  if (readings === null) return <Loading />;
   if (readings.length === 0) return <p className="hint">An diesem Tag hat Ford keine neuen Kilometer gemeldet.</p>;
   const time = (ts: string) => new Date(ts).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 
@@ -115,7 +116,7 @@ function DayDetails({ vin, date, onChanged }: { vin: string | null; date: string
           Zurücksetzen
         </button>
       </div>
-      {error && <p className="message error">{error}</p>}
+      {error && <ErrorMessage text={error} />}
       <table className="km-table readings">
         <thead>
           <tr>
@@ -197,7 +198,7 @@ function OdometerHistoryTab() {
       <VinSelect vins={data?.vins ?? []} vin={data?.vin ?? null} onChange={setVin} />
       <PeriodTabs period={period} onChange={setPeriod} />
       {data === null ? (
-        <p>Lade…</p>
+        <Skeleton ready={false} lines={6} />
       ) : rows.length === 0 ? (
         <p>Noch keine Kilometerstände gespeichert.</p>
       ) : (
@@ -220,9 +221,7 @@ function OdometerHistoryTab() {
                       <td>
                         {expandable ? (
                           <button className="expand" aria-expanded={isOpen} onClick={(e) => (e.stopPropagation(), toggle(r.period))}>
-                            <span className="arrow" aria-hidden="true">
-                              ▸
-                            </span>
+                            <ExpandChevron open={isOpen} />
                             {periodLabel(r.period, period)}
                           </button>
                         ) : (
@@ -238,10 +237,12 @@ function OdometerHistoryTab() {
                       </td>
                       <td className="num">{km(r.endKm)}</td>
                     </tr>
-                    {isOpen && (
+                    {expandable && (
                       <tr className="details-row">
                         <td colSpan={4}>
-                          <DayDetails vin={data.vin} date={r.period} onChanged={load} />
+                          <Collapse open={isOpen}>
+                            <DayDetails vin={data.vin} date={r.period} onChanged={load} />
+                          </Collapse>
                         </td>
                       </tr>
                     )}
@@ -279,7 +280,7 @@ function YearOverviewTab() {
     void fetch(`/api/odometer/year?${query}`).then(async (r) => setData(r.ok ? await r.json() : "empty"));
   }, [year, vin]);
 
-  if (data === null) return <p>Lade…</p>;
+  if (data === null) return <Skeleton ready={false} lines={8} />;
   if (data === "empty") return <p>Noch keine Kilometerstände gespeichert.</p>;
 
   const exportUrl = (format: string) => `/api/odometer/year/export?${new URLSearchParams({ vin: data.vin, year: String(year), format })}`;
@@ -292,16 +293,9 @@ function YearOverviewTab() {
         letzte bekannte Stand.
       </p>
       <div className="toolbar">
-        <label className="field">
-          Jahr{" "}
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-            {data.years.map((y) => (
-              <option key={y}>{y}</option>
-            ))}
-          </select>
-        </label>
+        <Select label="Jahr" value={String(year)} options={data.years.map(String)} onChange={(v) => setYear(Number(v))} />
         <VinSelect vins={data.vins} vin={data.vin} onChange={setVin} />
-        <ExportButtons label="Exportieren:" url={exportUrl} />
+        <ExportButtons label="Exportieren" url={exportUrl} />
       </div>
       <div className="table-wrap">
         <table className="km-table">

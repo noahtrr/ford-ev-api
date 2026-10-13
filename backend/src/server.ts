@@ -453,6 +453,8 @@ export function buildServer(config: Config, store: Store, client: FordClient, pu
 
   if (publicDir && existsSync(publicDir)) {
     app.register(fastifyStatic, { root: publicDir });
+    // Der Styleguide des Design-Systems ist eine Seite der App unter eigener Adresse.
+    app.get("/styleguide", (_req, reply) => reply.sendFile("index.html"));
   }
 
   return app;

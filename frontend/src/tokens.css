@@ -1,0 +1,291 @@
+/*
+ * Mein Ford – Design-Tokens. Die einzige Stelle mit Farb-, Zeit- und Größenwerten.
+ * Komponenten nutzen nur var(--…). Quelle: design-system/mein-ford/MASTER.md
+ *
+ * Breakpoints (Media Queries können keine Variablen lesen, darum hier dokumentiert):
+ *   360px  kleines Handy (Basis, mobile-first)
+ *   768px  Tablet
+ *   1024px Desktop: Seitenleiste statt Leiste unten
+ *   1440px großer Desktop
+ */
+:root {
+  color-scheme: dark;
+
+  /* ── Farben ─────────────────────────────────────────── */
+  --bg: #0a0a0a;
+  --surface-1: #111111; /* Karten */
+  --surface-2: #1a1a1a; /* Modals, Menüs */
+  --border: #262626; /* 1px-Linien statt Schatten */
+  --border-strong: #666666; /* Rahmen von Eingabefeldern und Bedienelementen: ≥ 3:1 auf allen Flächen */
+  --muted: #737373; /* Icons, Deko. Als Text zu schwach (4.2:1), dafür --text-muted */
+  --text-muted: #8a8a8a; /* Sekundärtext: 5.0:1 auf --surface-2, 5.7:1 auf --bg */
+  --text: #ededed;
+  --accent: #ffffff; /* sparsam: primäre Aktion, Fokus, aktiv */
+  --on-accent: #0a0a0a;
+  --success: #4a7c59;
+  --error: #8c3b3b;
+  --warning: #8c7a3b;
+  /* Status nur als Fläche/Linie, nie als Textfarbe (unter 4.5:1). Text darauf bleibt --text. */
+  --success-soft: color-mix(in srgb, var(--success) 18%, transparent);
+  --error-soft: color-mix(in srgb, var(--error) 22%, transparent);
+  --warning-soft: color-mix(in srgb, var(--warning) 20%, transparent);
+  --hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --pressed: color-mix(in srgb, var(--text) 10%, transparent);
+  --scrim: color-mix(in srgb, var(--bg) 72%, transparent);
+  --glass: color-mix(in srgb, var(--bg) 82%, transparent);
+
+  /* ── Typografie ─────────────────────────────────────── */
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --text-xs: 0.75rem; /* 12 */
+  --text-sm: 0.875rem; /* 14 */
+  --text-base: 1rem; /* 16 */
+  --text-lg: 1.25rem; /* 20 */
+  --text-xl: 1.5rem; /* 24 */
+  --text-2xl: 2rem; /* 32 */
+  --text-3xl: 3rem; /* 48 */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --leading-body: 1.6;
+  --leading-tight: 1.2;
+  --tracking-tight: -0.02em;
+
+  /* ── Abstände (8er-Raster) ──────────────────────────── */
+  --space-1: 0.25rem; /* 4 */
+  --space-2: 0.5rem; /* 8 */
+  --space-3: 1rem; /* 16 */
+  --space-4: 1.5rem; /* 24 */
+  --space-5: 2rem; /* 32 */
+  --space-6: 3rem; /* 48 */
+  --space-7: 4rem; /* 64 */
+
+  /* ── Formen ─────────────────────────────────────────── */
+  --radius-sm: 8px; /* Inputs, Buttons */
+  --radius-md: 12px; /* Karten */
+  --radius-lg: 16px; /* Modals */
+  --radius-full: 999px;
+  --border-width: 1px;
+  --focus-ring: 2px solid var(--accent);
+  --focus-offset: 2px;
+
+  /* ── Größen ─────────────────────────────────────────── */
+  --touch: 44px; /* Mindestgröße für Tipp-Ziele */
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  --icon-stroke: 1.5;
+  --content-max: 48rem;
+  --sidebar-width: 15rem;
+  --bottom-nav-height: 4rem;
+
+  /* ── Motion ─────────────────────────────────────────── */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1); /* nur Schalter und Zahlen, kleine Wege */
+  --ease-linear: linear;
+  --dur-fast: 150ms;
+  --dur-base: 250ms;
+  --dur-slow: 400ms;
+  /* Exit ≈ 70 % vom Enter */
+  --dur-fast-out: 100ms;
+  --dur-base-out: 175ms;
+  --dur-slow-out: 280ms;
+  --dur-stagger: 40ms;
+  --dur-micro: 80ms;
+  --dur-loop: 1200ms; /* Lade-Pulse, Matrix-Loader */
+  --dur-reduced: 100ms; /* prefers-reduced-motion: nur Opacity, unter 150ms */
+  --dur-ambient: 24s; /* Hintergrund der Anmeldeseite */
+  --dur-drive: 500ms; /* Räder und Straße der Anmeldeseite */
+  --dur-toast-hold: 4000ms; /* so lange bleibt eine Meldung stehen */
+  /* Grenzen aus den Vorgaben */
+  --move-sm: 4px;
+  --move-md: 8px;
+  --move-max: 12px;
+  --scale-from: 0.96;
+  --blur-sm: 2px;
+  --blur-md: 3px;
+  --blur-max: 4px;
+
+  /* ── transitions.dev: Stellschrauben, auf die Tokens oben gemappt ── */
+  /* Card resize */
+  --resize-dur: var(--dur-base);
+  --resize-ease: var(--ease-out);
+  /* Number pop-in */
+  --digit-dur: var(--dur-slow);
+  --digit-distance: var(--move-md);
+  --digit-stagger: var(--dur-stagger);
+  --digit-blur: var(--blur-sm);
+  --digit-ease: var(--ease-spring);
+  --digit-dir-x: 0;
+  --digit-dir-y: 1;
+  /* Text states swap */
+  --text-swap-dur: var(--dur-fast);
+  --text-swap-translate-y: var(--move-sm);
+  --text-swap-blur: var(--blur-sm);
+  --text-swap-ease: var(--ease-in-out);
+  /* Menu dropdown */
+  --dropdown-open-dur: var(--dur-base);
+  --dropdown-close-dur: var(--dur-base-out);
+  --dropdown-pre-scale: 0.97;
+  --dropdown-closing-scale: 0.99;
+  --dropdown-ease: var(--ease-out);
+  /* Modal open / close */
+  --modal-open-dur: var(--dur-base);
+  --modal-close-dur: var(--dur-base-out);
+  --modal-scale: var(--scale-from);
+  --modal-scale-close: var(--scale-from);
+  --modal-ease: var(--ease-out);
+  /* Panel reveal */
+  --panel-open-dur: var(--dur-slow);
+  --panel-close-dur: var(--dur-slow-out);
+  --panel-translate-y: var(--move-max);
+  --panel-blur: var(--blur-sm);
+  --panel-ease: var(--ease-out);
+  /* Page side-by-side */
+  --page-slide-dur: var(--dur-base);
+  --page-fade-dur: var(--dur-base);
+  --page-slide-distance: var(--move-md);
+  --page-blur: var(--blur-md);
+  --page-stagger: 0ms;
+  --page-exit-enabled: 1;
+  --page-slide-ease: var(--ease-out);
+  --page-fade-ease: var(--ease-out);
+  /* Icon swap */
+  --icon-swap-dur: var(--dur-base);
+  --icon-swap-blur: var(--blur-sm);
+  --icon-swap-start-scale: var(--scale-from);
+  --icon-swap-ease: var(--ease-in-out);
+  /* Success check */
+  --check-opacity-dur: var(--dur-slow);
+  --check-rotate-dur: var(--dur-slow);
+  --check-rotate-from: 20deg;
+  --check-bob-dur: var(--dur-slow);
+  --check-y-amount: var(--move-max);
+  --check-blur-dur: var(--dur-slow);
+  --check-blur-from: var(--blur-max);
+  --check-path-dur: var(--dur-slow);
+  --check-path-delay: var(--dur-micro);
+  --check-ease-out: var(--ease-out);
+  --check-ease-opacity: var(--ease-out);
+  --check-ease-rotate: var(--ease-out);
+  --check-ease-bob: var(--ease-spring);
+  --check-ease-path: var(--ease-out);
+  /* Error state shake (Prozent-Stopps im Keyframe passen zu 80/60) */
+  --shake-distance: 6px;
+  --shake-overshoot: var(--move-sm);
+  --shake-dur-a: var(--dur-micro);
+  --shake-dur-b: 60ms;
+  --shake-ease: var(--ease-out);
+  --revert-dur: var(--dur-slow-out);
+  /* Skeleton loader and reveal */
+  --pulse-dur: var(--dur-loop);
+  --pulse-count: infinite;
+  --pulse-min: 0.5;
+  --reveal-dur: var(--dur-slow);
+  --reveal-blur: var(--blur-sm);
+  --reveal-ease: var(--ease-in-out);
+  /* Tabs sliding */
+  --tabs-dur: var(--dur-base);
+  --tabs-ease: var(--ease-out);
+  --tabs-text-muted: var(--text-muted);
+  --tabs-text-active: var(--accent);
+  --tabs-bar-bg: var(--surface-1);
+  --tabs-pill-bg: var(--surface-2);
+  /* Tooltip open/close */
+  --tt-in-dur: var(--dur-fast);
+  --tt-out-dur: var(--dur-fast-out);
+  --tt-scale: 0.98;
+  --tt-delay: var(--dur-micro);
+  --tt-in-ease: var(--ease-out);
+  --tt-out-ease: var(--ease-out);
+  --tt-move-dur: var(--dur-fast);
+  --tt-move-ease: var(--ease-out);
+  --tt-bg: var(--surface-2);
+  --tt-fg: var(--text);
+  /* Texts reveal */
+  --stagger-dur: var(--dur-slow);
+  --stagger-distance: var(--move-max);
+  --stagger-stagger: var(--dur-stagger);
+  --stagger-blur: var(--blur-md);
+  --stagger-ease: var(--ease-out);
+  --stagger-out-dur: var(--dur-fast);
+  /* Accordion expand */
+  --acc-expand: var(--dur-base);
+  --acc-collapse: var(--dur-base-out);
+  --acc-chevron: var(--dur-base);
+  --acc-ease: var(--ease-out);
+  /* Toast open / close */
+  --toast-open: var(--dur-base);
+  --toast-close: var(--dur-base-out);
+  --toast-distance: var(--move-max);
+  --toast-blur: var(--blur-sm);
+  --toast-scale: 0.97;
+  --toast-ease: var(--ease-out);
+  /* Learn more hover */
+  --learn-shift: 2px;
+  --learn-spread: 8deg;
+  --learn-in: var(--dur-base);
+  --learn-out: var(--dur-base-out);
+  --learn-ease: var(--ease-out);
+  /* Checkbox check */
+  --check-box: var(--dur-fast);
+  --check-draw: var(--dur-base);
+  --check-delay: 0ms;
+  --check-uncheck: var(--dur-fast-out);
+  --check-ease: var(--ease-out);
+  /* Spinning counter */
+  --reel-dur: var(--dur-slow);
+  --reel-cell: 1.75rem;
+  --reel-spin-blur: var(--blur-md);
+  --reel-stagger: var(--dur-stagger);
+  --reel-ease: var(--ease-out);
+  /* Toggle */
+  --toggle-dur: var(--dur-base);
+  --toggle-travel: 20px;
+  --toggle-ov1: 1px;
+  --toggle-ov2: 0px;
+  --toggle-track: var(--dur-fast);
+  --toggle-ease: var(--ease-spring);
+  /* Matrix dot loader */
+  --matrix-cycle: var(--dur-loop);
+  --matrix-base: var(--border);
+  --matrix-active: var(--text-muted);
+  --matrix-ease: var(--ease-in-out);
+  /* Banner stacking (Wege auf höchstens 12px gekürzt) */
+  --stack-open: var(--dur-base);
+  --stack-close: var(--dur-base-out);
+  --stack-rise: var(--move-max);
+  --stack-blur: var(--blur-sm);
+  --stack-scale: 0.97;
+  --stack-peek: var(--move-sm);
+  --stack-spread-gap: var(--space-2);
+  --stack-depth-scale: 0.02;
+  --stack-depth-fade: 0.4;
+  --stack-depth1-blur: 1px;
+  --stack-depth2-blur: var(--blur-sm);
+  --stack-ease: var(--ease-out);
+}
+
+/*
+ * Weniger Bewegung: alle Wege, Skalierungen und Unschärfen auf null.
+ * Übrig bleiben nur kurze Opacity-Fades (Regel in transitions.css).
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --move-sm: 0px;
+    --move-md: 0px;
+    --move-max: 0px;
+    --scale-from: 1;
+    --blur-sm: 0px;
+    --blur-md: 0px;
+    --blur-max: 0px;
+    --dropdown-pre-scale: 1;
+    --dropdown-closing-scale: 1;
+    --tt-scale: 1;
+    --toast-scale: 1;
+    --stack-scale: 1;
+    --shake-distance: 0px;
+    --check-rotate-from: 0deg;
+    --page-exit-enabled: 0;
+  }
+}

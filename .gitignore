@@ -4,3 +4,7 @@ data/
 .env
 *.log
 deploy/caddy.env
+# Lokal installierte Agent-Skills (Lizenz erlaubt keine Veröffentlichung der Sammlung) und graphify-Ausgabe
+frontend/.claude/skills/
+frontend/.agents/skills/
+frontend/graphify-out/
