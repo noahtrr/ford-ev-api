@@ -1,7 +1,9 @@
 // Anmeldeseite (Passwort oder Passkey) und Profilseite mit den Kontoeinstellungen.
 import { browserSupportsWebAuthn, startAuthentication, startRegistration, WebAuthnError } from "@simplewebauthn/browser";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Fingerprint, KeyRound, LogOut, Pencil, Trash2 } from "lucide-react";
+import { useEffect, useState, type FormEvent } from "react";
 import { CarDrawing } from "./common";
+import { Button, buttonClass, Card, ErrorMessage, Field, LearnMore, Modal, Skeleton, TextsReveal, useToast, Wordmark } from "./ui";
 
 /** Event, wenn die Anmeldung weg ist (abgemeldet oder Sitzung abgelaufen). App zeigt dann die Anmeldeseite. */
 export const LOGGED_OUT = "ford-logged-out";
@@ -92,17 +94,13 @@ export function deviceName(userAgent: string | null): string {
 const dateTime = (iso: string) => new Date(iso).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" });
 const date = (iso: string) => new Date(iso).toLocaleDateString("de-DE", { dateStyle: "medium" });
 
-function Message({ error, success }: { error?: string | null; success?: string | null }) {
-  if (error) return <p className="message error">{error}</p>;
-  if (success) return <p className="message ok">{success}</p>;
-  return null;
-}
-
-/** Linke Seite der Anmeldung: Titel und ein Explorer, der auf einer Straße fährt. */
+/** Linke Seite der Anmeldung: Wortmarke und ein Explorer, der auf einer Straße fährt. */
 function LoginHero() {
   return (
     <section className="login-hero">
-      <h1>Mein Ford</h1>
+      <h1>
+        <Wordmark size={32} />
+      </h1>
       <div className="road-scene">
         <CarDrawing charging={false} />
         <div className="road" />
@@ -119,23 +117,30 @@ export function LoginPage({ setupMissing, onLoggedIn }: { setupMissing: boolean;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Zählt Fehlversuche, damit das Feld bei jedem erneut wackelt.
+  const [attempt, setAttempt] = useState(0);
+  const [busy, setBusy] = useState<"password" | "passkey" | null>(null);
+
+  const fail = (err: unknown) => {
+    setError(errorText(err));
+    setAttempt((a) => a + 1);
+    setBusy(null);
+  };
 
   const withPassword = async (e: FormEvent) => {
     e.preventDefault();
-    setBusy(true);
+    setBusy("password");
     setError(null);
     try {
       await api("POST", "/api/auth/login", { username, password });
       onLoggedIn();
     } catch (err) {
-      setError(errorText(err));
-      setBusy(false);
+      fail(err);
     }
   };
 
   const withPasskey = async () => {
-    setBusy(true);
+    setBusy("passkey");
     setError(null);
     try {
       const optionsJSON = await api<Parameters<typeof startAuthentication>[0]["optionsJSON"]>("POST", "/api/auth/passkey/login/options");
@@ -143,8 +148,7 @@ export function LoginPage({ setupMissing, onLoggedIn }: { setupMissing: boolean;
       await api("POST", "/api/auth/passkey/login/verify", response);
       onLoggedIn();
     } catch (err) {
-      setError(errorText(err));
-      setBusy(false);
+      fail(err);
     }
   };
 
@@ -155,120 +159,136 @@ export function LoginPage({ setupMissing, onLoggedIn }: { setupMissing: boolean;
         <section className="login-panel">
           <p className="login-intro">{LOGIN_INTRO}</p>
           {setupMissing ? (
-            <p className="message error">
-              Der Login ist auf dem Server noch nicht eingerichtet: LOGIN_USER und LOGIN_HASH fehlen. Bis das erledigt ist, bleibt die App
-              gesperrt.
-            </p>
+            <ErrorMessage text="Der Login ist auf dem Server noch nicht eingerichtet: LOGIN_USER und LOGIN_HASH fehlen. Bis das erledigt ist, bleibt die App gesperrt." />
           ) : (
             <form onSubmit={withPassword} className="form">
-              <label>
-                Benutzername
-                <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" required />
-              </label>
-              <label>
-                Passwort
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required />
-              </label>
-              {browserSupportsWebAuthn() && (
-                <button className="button wide secondary" type="button" onClick={withPasskey} disabled={busy}>
-                  Mit Passkey anmelden
-                </button>
-              )}
-              <button className="button wide" type="submit" disabled={busy}>
+              <Field
+                label="Benutzername"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                autoCapitalize="none"
+                required
+              />
+              <Field
+                label="Passwort"
+                type="password"
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setError(null);
+                }}
+                autoComplete="current-password"
+                required
+                error={error}
+                errorKey={attempt}
+              />
+              <Button type="submit" wide loading={busy === "password"} disabled={busy !== null}>
                 Anmelden
-              </button>
+              </Button>
+              {browserSupportsWebAuthn() && (
+                <Button variant="secondary" wide icon={Fingerprint} onClick={withPasskey} loading={busy === "passkey"} disabled={busy !== null}>
+                  Mit Passkey anmelden
+                </Button>
+              )}
             </form>
           )}
-          <Message error={error} />
         </section>
       </main>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="card">
-      <h2>{title}</h2>
-      {children}
-    </section>
-  );
-}
-
 function AccountSection({ profile, reload }: { profile: Profile; reload: () => void }) {
+  const toast = useToast();
   const [name, setName] = useState(profile.displayName ?? "");
-  const [msg, setMsg] = useState<{ error?: string | null; success?: string | null }>({});
+  const [error, setError] = useState<string | null>(null);
   const save = async (e: FormEvent) => {
     e.preventDefault();
     try {
       await api("PATCH", "/api/profile", { displayName: name });
-      setMsg({ success: "Gespeichert." });
+      setError(null);
+      toast("Gespeichert");
       reload();
     } catch (err) {
-      setMsg({ error: errorText(err) });
+      setError(errorText(err));
     }
   };
   return (
-    <Section title="Konto">
+    <Card title="Konto">
       <dl>
         <dt>Benutzername</dt>
         <dd>{profile.username ?? "–"}</dd>
       </dl>
       <form onSubmit={save} className="form inline">
-        <label>
-          Anzeigename
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder={profile.username ?? ""} />
-        </label>
-        <button className="button small" type="submit">
+        <Field label="Anzeigename" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder={profile.username ?? ""} error={error} />
+        <Button type="submit" variant="secondary">
           Speichern
-        </button>
+        </Button>
       </form>
-      <Message {...msg} />
-    </Section>
+    </Card>
   );
 }
 
 function PasskeySection({ profile, reload }: { profile: Profile; reload: () => void }) {
+  const toast = useToast();
   const [name, setName] = useState(() => deviceName(navigator.userAgent).split(" · ")[0]);
-  const [msg, setMsg] = useState<{ error?: string | null; success?: string | null }>({});
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [renaming, setRenaming] = useState<Passkey | null>(null);
+  const [newName, setNewName] = useState("");
+  const [removing, setRemoving] = useState<Passkey | null>(null);
+  // Name im Dialog behalten, solange er sich schließt.
+  const [shown, setShown] = useState<Passkey | null>(null);
 
   const add = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
-    setMsg({});
+    setError(null);
     try {
       const optionsJSON = await api<Parameters<typeof startRegistration>[0]["optionsJSON"]>("POST", "/api/profile/passkeys/options");
       const response = await startRegistration({ optionsJSON });
       await api("POST", "/api/profile/passkeys/verify", { name, response });
-      setMsg({ success: "Passkey hinzugefügt. Ab jetzt kannst du dich damit ohne Passwort anmelden." });
+      toast("Passkey hinzugefügt. Ab jetzt meldest du dich damit ohne Passwort an.");
       reload();
     } catch (err) {
       const text =
         err instanceof WebAuthnError && err.code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED"
           ? "Dieses Gerät hat schon einen Passkey für dein Konto."
           : errorText(err);
-      setMsg({ error: text });
+      setError(text);
     } finally {
       setBusy(false);
     }
   };
 
-  const rename = async (p: Passkey) => {
-    const newName = window.prompt("Neuer Name für den Passkey:", p.name);
-    if (!newName?.trim()) return;
-    await api("PATCH", `/api/profile/passkeys/${encodeURIComponent(p.id)}`, { name: newName }).catch((err) => setMsg({ error: errorText(err) }));
+  const startRename = (p: Passkey) => {
+    setNewName(p.name);
+    setShown(p);
+    setRenaming(p);
+  };
+
+  const rename = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!renaming || !newName.trim()) return;
+    await api("PATCH", `/api/profile/passkeys/${encodeURIComponent(renaming.id)}`, { name: newName })
+      .then(() => toast("Passkey umbenannt"))
+      .catch((err) => toast(errorText(err) ?? "Umbenennen fehlgeschlagen", "error"));
+    setRenaming(null);
     reload();
   };
 
-  const remove = async (p: Passkey) => {
-    if (!window.confirm(`Passkey „${p.name}“ entfernen? Mit ihm kannst du dich danach nicht mehr anmelden.`)) return;
-    await api("DELETE", `/api/profile/passkeys/${encodeURIComponent(p.id)}`).catch((err) => setMsg({ error: errorText(err) }));
+  const remove = async () => {
+    if (!removing) return;
+    await api("DELETE", `/api/profile/passkeys/${encodeURIComponent(removing.id)}`)
+      .then(() => toast("Passkey entfernt"))
+      .catch((err) => toast(errorText(err) ?? "Entfernen fehlgeschlagen", "error"));
+    setRemoving(null);
     reload();
   };
 
   return (
-    <Section title="Passkeys">
+    <Card title="Passkeys">
       <p className="hint">
         Mit einem Passkey meldest du dich per Fingerabdruck, Gesicht oder Geräte-PIN an, ganz ohne Passwort. Er ist auf deinem Gerät
         gespeichert (z. B. im iCloud-Schlüsselbund oder Google-Passwortmanager). Dein Passwort bleibt als Notlösung immer gültig.
@@ -286,12 +306,20 @@ function PasskeySection({ profile, reload }: { profile: Profile; reload: () => v
                 </small>
               </div>
               <div className="actions">
-                <button className="link" onClick={() => rename(p)}>
+                <Button variant="ghost" small icon={Pencil} onClick={() => startRename(p)}>
                   Umbenennen
-                </button>
-                <button className="link danger" onClick={() => remove(p)}>
+                </Button>
+                <Button
+                  variant="ghost"
+                  small
+                  icon={Trash2}
+                  onClick={() => {
+                    setShown(p);
+                    setRemoving(p);
+                  }}
+                >
                   Entfernen
-                </button>
+                </Button>
               </div>
             </li>
           ))}
@@ -303,51 +331,82 @@ function PasskeySection({ profile, reload }: { profile: Profile; reload: () => v
         <p className="hint">Dieser Browser kann keine Passkeys.</p>
       ) : (
         <form onSubmit={add} className="form inline">
-          <label>
-            Name für den neuen Passkey
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="z. B. iPhone" />
-          </label>
-          <button className="button small" type="submit" disabled={busy}>
+          <Field label="Name für den neuen Passkey" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="z. B. iPhone" error={error} />
+          <Button type="submit" variant="secondary" icon={KeyRound} loading={busy}>
             Passkey hinzufügen
-          </button>
+          </Button>
         </form>
       )}
-      <Message {...msg} />
-    </Section>
+
+      <Modal open={renaming !== null} onClose={() => setRenaming(null)} title="Passkey umbenennen">
+        <form id="rename-passkey" onSubmit={rename} className="form">
+          <Field label="Neuer Name" value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={60} required autoFocus />
+        </form>
+        <div className="modal-actions">
+          <Button variant="secondary" onClick={() => setRenaming(null)}>
+            Abbrechen
+          </Button>
+          <Button type="submit" form="rename-passkey">
+            Speichern
+          </Button>
+        </div>
+      </Modal>
+      <Modal
+        open={removing !== null}
+        onClose={() => setRemoving(null)}
+        title={`Passkey „${shown?.name ?? ""}“ entfernen?`}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setRemoving(null)}>
+              Abbrechen
+            </Button>
+            <Button onClick={remove}>Entfernen</Button>
+          </>
+        }
+      >
+        Mit diesem Passkey kannst du dich danach nicht mehr anmelden.
+      </Modal>
+    </Card>
   );
 }
 
 function PasswordSection({ profile, reload }: { profile: Profile; reload: () => void }) {
+  const toast = useToast();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [repeat, setRepeat] = useState("");
-  const [msg, setMsg] = useState<{ error?: string | null; success?: string | null }>({});
+  const [error, setError] = useState<{ field: "current" | "repeat"; text: string } | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const change = async (e: FormEvent) => {
     e.preventDefault();
-    if (next !== repeat) return setMsg({ error: "Die neuen Passwörter sind verschieden." });
+    setAttempt((a) => a + 1);
+    if (next !== repeat) return setError({ field: "repeat", text: "Die neuen Passwörter sind verschieden." });
     try {
       await api("POST", "/api/profile/password", { currentPassword: current, newPassword: next });
       setCurrent("");
       setNext("");
       setRepeat("");
-      setMsg({ success: "Passwort geändert. Alle anderen Geräte wurden abgemeldet." });
+      setError(null);
+      toast("Passwort geändert. Alle anderen Geräte wurden abgemeldet.");
       reload();
     } catch (err) {
-      setMsg({ error: errorText(err) });
+      setError({ field: "current", text: errorText(err) ?? "Ändern fehlgeschlagen" });
     }
   };
 
   const reset = async () => {
-    if (!window.confirm("Wieder das Passwort aus der Server-Einrichtung verwenden?")) return;
-    await api("DELETE", "/api/profile/password").catch((err) => setMsg({ error: errorText(err) }));
-    setMsg({ success: "Es gilt wieder das Passwort aus der Server-Einrichtung." });
+    setConfirmReset(false);
+    await api("DELETE", "/api/profile/password")
+      .then(() => toast("Es gilt wieder das Passwort aus der Server-Einrichtung."))
+      .catch((err) => toast(errorText(err) ?? "Zurücksetzen fehlgeschlagen", "error"));
     reload();
   };
 
   if (profile.passwordSource === "none") return null;
   return (
-    <Section title="Passwort">
+    <Card title="Passwort">
       <p className="hint">
         {profile.passwordSource === "server"
           ? "Du nutzt das Passwort aus der Server-Einrichtung."
@@ -355,42 +414,80 @@ function PasswordSection({ profile, reload }: { profile: Profile; reload: () => 
       </p>
       <form onSubmit={change} className="form">
         <input type="text" name="username" value={profile.username ?? ""} autoComplete="username" readOnly hidden />
-        <label>
-          Aktuelles Passwort
-          <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required />
-        </label>
-        <label>
-          Neues Passwort (mindestens 8 Zeichen)
-          <input type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" minLength={8} required />
-        </label>
-        <label>
-          Neues Passwort wiederholen
-          <input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} autoComplete="new-password" minLength={8} required />
-        </label>
+        <Field
+          label="Aktuelles Passwort"
+          type="password"
+          value={current}
+          onChange={(e) => setCurrent(e.target.value)}
+          autoComplete="current-password"
+          required
+          error={error?.field === "current" ? error.text : null}
+          errorKey={attempt}
+        />
+        <Field
+          label="Neues Passwort"
+          hint="Mindestens 8 Zeichen"
+          type="password"
+          value={next}
+          onChange={(e) => setNext(e.target.value)}
+          autoComplete="new-password"
+          minLength={8}
+          required
+        />
+        <Field
+          label="Neues Passwort wiederholen"
+          type="password"
+          value={repeat}
+          onChange={(e) => {
+            setRepeat(e.target.value);
+            if (error?.field === "repeat") setError(null);
+          }}
+          autoComplete="new-password"
+          minLength={8}
+          required
+          error={error?.field === "repeat" ? error.text : null}
+          errorKey={attempt}
+        />
         <div className="actions">
-          <button className="button small" type="submit">
+          <Button type="submit" variant="secondary">
             Passwort ändern
-          </button>
+          </Button>
           {profile.canResetPassword && (
-            <button type="button" className="link" onClick={reset}>
+            <button type="button" className="link-btn" onClick={() => setConfirmReset(true)}>
               Zurück zum Passwort aus der Server-Einrichtung
             </button>
           )}
         </div>
       </form>
-      <Message {...msg} />
-    </Section>
+      <Modal
+        open={confirmReset}
+        onClose={() => setConfirmReset(false)}
+        title="Server-Passwort verwenden?"
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmReset(false)}>
+              Abbrechen
+            </Button>
+            <Button onClick={reset}>Zurücksetzen</Button>
+          </>
+        }
+      >
+        Danach gilt wieder das Passwort aus der Server-Einrichtung.
+      </Modal>
+    </Card>
   );
 }
 
 function SessionSection({ profile, reload }: { profile: Profile; reload: () => void }) {
+  const toast = useToast();
   const others = profile.sessions.filter((s) => !s.current).length;
   const logoutOthers = async () => {
     await api("POST", "/api/profile/sessions/logout-others");
+    toast(others === 1 ? "Ein Gerät abgemeldet" : `${others} Geräte abgemeldet`);
     reload();
   };
   return (
-    <Section title="Angemeldete Geräte">
+    <Card title="Angemeldete Geräte">
       {profile.sessions.length === 0 ? (
         <p className="hint">Keine. Ohne eingerichteten Login braucht es keine Anmeldung.</p>
       ) : (
@@ -411,11 +508,11 @@ function SessionSection({ profile, reload }: { profile: Profile; reload: () => v
         </ul>
       )}
       {others > 0 && (
-        <button className="button small secondary" onClick={logoutOthers}>
+        <Button variant="secondary" small onClick={logoutOthers}>
           Alle anderen Geräte abmelden ({others})
-        </button>
+        </Button>
       )}
-    </Section>
+    </Card>
   );
 }
 
@@ -434,29 +531,38 @@ export function ProfilePage() {
     window.dispatchEvent(new Event(LOGGED_OUT));
   };
 
-  if (error) return <Message error={error} />;
-  if (!profile) return <p>Lade…</p>;
+  if (error) return <ErrorMessage text={error} />;
   return (
     <>
-      <h1>Profil</h1>
-      {!profile.passkeysAvailable && (
-        <p className="message error">Der Login ist nicht eingerichtet, die App ist ohne Passwort erreichbar.</p>
-      )}
-      <AccountSection profile={profile} reload={load} />
-      <PasskeySection profile={profile} reload={load} />
-      <PasswordSection profile={profile} reload={load} />
-      <SessionSection profile={profile} reload={load} />
-      <Section title="Ford-Verbindung">
-        <p>{profile.fordConnected ? "Mit deinem FordPass-Konto verbunden." : "Noch nicht mit Ford verbunden."}</p>
-        <a className="button small" href="/login">
-          {profile.fordConnected ? "Neu mit Ford verbinden" : "Mit Ford verbinden"}
-        </a>
-      </Section>
-      {profile.sessions.length > 0 && (
-        <button className="button secondary" onClick={logout}>
-          Abmelden
-        </button>
-      )}
+      <TextsReveal title="Profil" />
+      <Skeleton ready={profile !== null} lines={8}>
+        {profile && (
+          <>
+            {!profile.passkeysAvailable && <ErrorMessage text="Der Login ist nicht eingerichtet, die App ist ohne Passwort erreichbar." />}
+            <AccountSection profile={profile} reload={load} />
+            <PasskeySection profile={profile} reload={load} />
+            <PasswordSection profile={profile} reload={load} />
+            <SessionSection profile={profile} reload={load} />
+            <Card title="Ford-Verbindung">
+              <p>{profile.fordConnected ? "Mit deinem FordPass-Konto verbunden." : "Noch nicht mit Ford verbunden."}</p>
+              <a className={buttonClass("secondary", { small: true })} href="/login">
+                {profile.fordConnected ? "Neu mit Ford verbinden" : "Mit Ford verbinden"}
+              </a>
+            </Card>
+            <div className="actions">
+              {profile.sessions.length > 0 && (
+                <Button variant="secondary" icon={LogOut} onClick={logout}>
+                  Abmelden
+                </Button>
+              )}
+              <LearnMore href="/api/docs" external>
+                API-Endpunkte (Swagger)
+              </LearnMore>
+              <LearnMore href="/styleguide">Styleguide</LearnMore>
+            </div>
+          </>
+        )}
+      </Skeleton>
     </>
   );
 }

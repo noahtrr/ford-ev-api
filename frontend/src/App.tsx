@@ -1,8 +1,10 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { BatteryCharging, ExternalLink, Gauge, House, User, type LucideIcon } from "lucide-react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { LOGGED_OUT, LoginPage, ProfilePage, type Me } from "./Account";
 import { ChargingPage } from "./Charging";
 import { OdometerPage } from "./Odometer";
 import { CarDrawing, MapFrame, mapsUrl } from "./common";
+import { Button, buttonClass, Card, ICON, Loading, NumberPop, PageTransition, Skeleton, TextSwap, TextsReveal, Wordmark } from "./ui";
 
 // Antwortet das Backend mit 401, ist die Anmeldung abgelaufen: dann zur Anmeldeseite.
 const originalFetch = window.fetch.bind(window);
@@ -50,18 +52,24 @@ const NO_DATA = "Ford liefert keine Daten";
 function Tile({
   title,
   value,
+  display,
   tone,
   children,
 }: {
   title: string;
   value: string | null;
+  /** Statt des reinen Textes anzeigen, z. B. mit Animation. */
+  display?: ReactNode;
   tone?: "ok" | "warn";
   children?: ReactNode;
 }) {
   return (
-    <div className={`tile${value === null ? " missing" : ""}${tone ? ` ${tone}` : ""}`}>
-      <span className="tile-title">{title}</span>
-      <strong className="tile-value">{value ?? NO_DATA}</strong>
+    <div className={`tile${value === null ? " missing" : ""}${tone === "warn" ? " warn" : ""}`}>
+      <span className="tile-title">
+        {tone && <span className={`dot tone-${tone}`} aria-hidden="true" />}
+        {title}
+      </span>
+      <strong className="tile-value">{value === null ? NO_DATA : (display ?? value)}</strong>
       {value !== null && children}
     </div>
   );
@@ -95,7 +103,7 @@ function DoorsTile({ doors, locked }: { doors: Opening[] | null; locked: boolean
   const value = summary && lockText ? `${summary} · ${lockText}` : (summary ?? lockText);
   const warn = doors?.some((o) => o.open) || locked === false;
   return (
-    <Tile title="Türen" value={value} tone={value === null ? undefined : warn ? "warn" : "ok"}>
+    <Tile title="Türen" value={value} display={value && <TextSwap text={value} />} tone={value === null ? undefined : warn ? "warn" : "ok"}>
       {doors && <Openings items={doors} />}
     </Tile>
   );
@@ -105,7 +113,7 @@ function WindowsTile({ windows }: { windows: Opening[] | null }) {
   const summary = openingsSummary(windows);
   const warn = windows?.some((o) => o.open);
   return (
-    <Tile title="Fenster" value={summary} tone={summary === null ? undefined : warn ? "warn" : "ok"}>
+    <Tile title="Fenster" value={summary} display={summary && <TextSwap text={summary} />} tone={summary === null ? undefined : warn ? "warn" : "ok"}>
       {windows && <Openings items={windows} />}
     </Tile>
   );
@@ -122,7 +130,8 @@ function PositionTile({ lat, lon, address }: { lat: number | null; lon: number |
       <MapFrame lat={lat} lon={lon} label="Standort" />
       <div className="location-meta">
         <span>{address && coords}</span>
-        <a className="button small" href={mapsUrl(lat, lon)} target="_blank" rel="noopener noreferrer">
+        <a className={buttonClass("secondary", { small: true })} href={mapsUrl(lat, lon)} target="_blank" rel="noopener noreferrer">
+          <ExternalLink {...ICON} size={16} />
           In Google Maps öffnen
         </a>
       </div>
@@ -150,9 +159,7 @@ function VehicleImage({ info, charging }: { info: VehicleInfo | undefined; charg
   );
 }
 
-function show(value: number | string | null, unit = ""): string {
-  return value === null ? "–" : `${value}${unit}`;
-}
+const fmt = (value: number) => value.toLocaleString("de-DE");
 
 /** Startseite mit den Kacheln je Auto. */
 function OverviewPage() {
@@ -163,11 +170,11 @@ function OverviewPage() {
   useEffect(() => {
     const load = async () => {
       const status = await fetch("/api/status").then((r) => r.json());
-      setLoggedIn(status.loggedIn);
       if (status.loggedIn) {
         setSnapshots(await fetch("/api/snapshots/latest").then((r) => r.json()));
         setVehicleInfo(await fetch("/api/vehicle-info").then((r) => r.json()));
       }
+      setLoggedIn(status.loggedIn);
     };
     void load();
     // Jede Minute neu laden, das Backend fragt Ford selbst im Hintergrund ab.
@@ -175,52 +182,55 @@ function OverviewPage() {
     return () => clearInterval(timer);
   }, []);
 
-  if (loggedIn === null) return <p>Lade…</p>;
-
-  if (!loggedIn) {
-    return (
-      <>
-        <h1>Mein Ford</h1>
-        <p>Verbinde die App einmal mit deinem FordPass-Konto.</p>
-        <a className="button" href="/login">
-          Mit Ford verbinden
-        </a>
-      </>
-    );
-  }
-
   return (
     <>
-      <h1>Mein Ford</h1>
-      {snapshots.length === 0 && <p>Noch keine Daten. Die erste Abfrage läuft gleich.</p>}
-      {snapshots.map((s) => {
-        const info = vehicleInfo?.vehicles.find((v) => v.vin === s.vin);
-        const name = [info?.model, info?.year].filter(Boolean).join(" ");
-        return (
-          <section key={s.vin} className="card">
-            <VehicleImage info={info} charging={isCharging(s)} />
-            <h2>{name || s.vin}</h2>
-            {name && <p className="vin">{s.vin}</p>}
-            <div className="hero-stats">
-              <Tile title="Akku" value={s.socPct === null ? null : show(s.socPct, " %")}>
-                <div className={`soc-meter${s.socPct !== null && s.socPct < 20 ? " low" : ""}`}>
-                  <span style={{ width: `${Math.min(100, Math.max(0, s.socPct ?? 0))}%` }} />
-                </div>
-              </Tile>
-              <Tile title="Reichweite" value={s.rangeKm === null ? null : show(s.rangeKm, " km")} />
-            </div>
-            <div className="tiles">
-              <Tile title="Kilometerstand" value={s.odometerKm === null ? null : show(s.odometerKm, " km")} />
-              <Tile title="Ladekabel" value={s.plugStatus} />
-              <Tile title="Ladestatus" value={s.chargeStatus} />
-              <DoorsTile doors={s.doors ?? null} locked={s.locked ?? null} />
-              <WindowsTile windows={s.windows ?? null} />
-              <PositionTile lat={s.lat ?? null} lon={s.lon ?? null} address={s.address ?? null} />
-            </div>
-            <small>Stand: {new Date(s.ts).toLocaleString("de-DE")}</small>
-          </section>
-        );
-      })}
+      <TextsReveal title="Übersicht" />
+      <Skeleton ready={loggedIn !== null} lines={6}>
+        {loggedIn === false ? (
+          <Card>
+            <p>Verbinde die App einmal mit deinem FordPass-Konto.</p>
+            <a className={buttonClass()} href="/login">
+              Mit Ford verbinden
+            </a>
+          </Card>
+        ) : (
+          <>
+            {snapshots.length === 0 && <p className="hint">Noch keine Daten. Die erste Abfrage läuft gleich.</p>}
+            {snapshots.map((s) => {
+              const info = vehicleInfo?.vehicles.find((v) => v.vin === s.vin);
+              const name = [info?.model, info?.year].filter(Boolean).join(" ");
+              return (
+                <section key={s.vin} className="card">
+                  <VehicleImage info={info} charging={isCharging(s)} />
+                  <h2>{name || s.vin}</h2>
+                  {name && <p className="vin">{s.vin}</p>}
+                  <div className="hero-stats">
+                    <Tile title="Akku" value={s.socPct === null ? null : `${s.socPct} %`} display={<NumberPop value={`${s.socPct} %`} />}>
+                      <div className={`soc-meter${s.socPct !== null && s.socPct < 20 ? " low" : ""}`}>
+                        <span style={{ width: `${Math.min(100, Math.max(0, s.socPct ?? 0))}%` }} />
+                      </div>
+                    </Tile>
+                    <Tile
+                      title="Reichweite"
+                      value={s.rangeKm === null ? null : `${fmt(s.rangeKm)} km`}
+                      display={s.rangeKm !== null && <NumberPop value={`${fmt(s.rangeKm)} km`} />}
+                    />
+                  </div>
+                  <div className="tiles">
+                    <Tile title="Kilometerstand" value={s.odometerKm === null ? null : `${fmt(s.odometerKm)} km`} />
+                    <Tile title="Ladekabel" value={s.plugStatus} display={s.plugStatus && <TextSwap text={s.plugStatus} />} />
+                    <Tile title="Ladestatus" value={s.chargeStatus} display={s.chargeStatus && <TextSwap text={s.chargeStatus} />} />
+                    <DoorsTile doors={s.doors ?? null} locked={s.locked ?? null} />
+                    <WindowsTile windows={s.windows ?? null} />
+                    <PositionTile lat={s.lat ?? null} lon={s.lon ?? null} address={s.address ?? null} />
+                  </div>
+                  <small>Stand: {new Date(s.ts).toLocaleString("de-DE")}</small>
+                </section>
+              );
+            })}
+          </>
+        )}
+      </Skeleton>
     </>
   );
 }
@@ -229,11 +239,11 @@ function OverviewPage() {
  * Die Seiten der App. Die Adresse steht hinter dem # (z. B. /#/kilometerstand), so braucht der Server nichts extra.
  * Was nach der Seite kommt, ist der Reiter auf der Seite (z. B. /#/kilometerstand/export).
  */
-const PAGES: { path: string; label: string; page: (props: { sub: string }) => ReactNode }[] = [
-  { path: "#/", label: "Übersicht", page: OverviewPage },
-  { path: "#/kilometerstand", label: "Kilometerstand", page: OdometerPage },
-  { path: "#/ladevorgaenge", label: "Ladevorgänge", page: ChargingPage },
-  { path: "#/profil", label: "Profil", page: ProfilePage },
+const PAGES: { path: string; label: string; icon: LucideIcon; page: (props: { sub: string }) => ReactNode }[] = [
+  { path: "#/", label: "Übersicht", icon: House, page: OverviewPage },
+  { path: "#/kilometerstand", label: "Kilometerstand", icon: Gauge, page: OdometerPage },
+  { path: "#/ladevorgaenge", label: "Ladevorgänge", icon: BatteryCharging, page: ChargingPage },
+  { path: "#/profil", label: "Profil", icon: User, page: ProfilePage },
 ];
 
 /** Alte Adressen, die es nicht mehr gibt, z. B. aus Lesezeichen. */
@@ -250,37 +260,34 @@ function currentRoute(): { path: string; sub: string } {
   return { path: "#/", sub: "" };
 }
 
-/** Kopfzeile mit Hamburger-Menü. */
-function Header({ path }: { path: string }) {
-  const [open, setOpen] = useState(false);
-  // Nach einem Klick auf eine Seite das Menü wieder schließen.
-  useEffect(() => setOpen(false), [path]);
-  // Menü und Abdunklung liegen bewusst außerhalb der Kopfzeile: deren
-  // backdrop-filter würde sonst "position: fixed" auf die Kopfzeilenhöhe begrenzen.
+/** Navigation: Seitenleiste ab 1024px, darunter Leiste am unteren Rand (höchstens 5 Einträge). */
+function Navigation({ path }: { path: string }) {
+  const items = PAGES.map((p) => (
+    <a key={p.path} href={p.path} className="nav-item" aria-current={p.path === path ? "page" : undefined}>
+      <p.icon {...ICON} />
+      {p.label}
+    </a>
+  ));
   return (
     <>
-      <header className="topbar">
-        <button className="hamburger" aria-label="Menü" aria-expanded={open} onClick={() => setOpen(!open)}>
-          <span />
-          <span />
-          <span />
-        </button>
-        <span className="topbar-title">{PAGES.find((p) => p.path === path)?.label}</span>
-      </header>
-      {open && <div className="menu-backdrop" onClick={() => setOpen(false)} />}
-      <nav className={`menu${open ? " open" : ""}`} aria-hidden={!open}>
-        {PAGES.map((p) => (
-          <a key={p.path} href={p.path} className={p.path === path ? "active" : undefined} onClick={() => setOpen(false)}>
-            {p.label}
+      <nav className="sidebar" aria-label="Hauptnavigation">
+        <Wordmark />
+        {items}
+        <div className="sidebar-foot">
+          <a className="nav-item" href="/api/docs" target="_blank" rel="noopener noreferrer">
+            <ExternalLink {...ICON} />
+            API-Endpunkte
           </a>
-        ))}
-        <a href="/api/docs" target="_blank" rel="noopener noreferrer">
-          API-Endpunkte (Swagger)
-        </a>
+        </div>
+      </nav>
+      <nav className="bottom-nav" aria-label="Hauptnavigation">
+        {items}
       </nav>
     </>
   );
 }
+
+const Styleguide = lazy(() => import("./Styleguide"));
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -304,24 +311,41 @@ export function App() {
     };
   }, []);
 
+  // Der Styleguide zeigt nur das Design-System, keine Daten: darum ohne Anmeldung erreichbar.
+  if (window.location.pathname === "/styleguide") {
+    return (
+      <Suspense fallback={<Loading />}>
+        <Styleguide />
+      </Suspense>
+    );
+  }
   if (me === null && offline) {
     return (
-      <main>
-        <h1>Mein Ford</h1>
-        <p>Keine Verbindung zum Server. Prüfe dein Internet und versuche es noch einmal.</p>
-        <button type="button" className="button" onClick={loadMe}>
-          Erneut versuchen
-        </button>
+      <main className="app-main">
+        <TextsReveal title="Keine Verbindung" subtitle="Der Server ist nicht erreichbar. Prüfe dein Internet und versuche es noch einmal." />
+        <Button onClick={loadMe}>Erneut versuchen</Button>
       </main>
     );
   }
-  if (me === null) return <main>Lade…</main>;
+  if (me === null)
+    return (
+      <main className="app-main">
+        <Loading />
+      </main>
+    );
   if (me.loginRequired && !me.loggedIn) return <LoginPage setupMissing={me.setupMissing} onLoggedIn={loadMe} />;
   return <LoggedInApp />;
 }
 
 function LoggedInApp() {
   const [route, setRoute] = useState(currentRoute);
+  // Richtung des Seitenwechsels: weiter in der Navigation = von rechts, zurück = von links.
+  const index = PAGES.findIndex((p) => p.path === route.path);
+  const lastIndex = useRef(index);
+  const direction = index >= lastIndex.current ? 2 : 1;
+  useEffect(() => {
+    lastIndex.current = index;
+  }, [index]);
   useEffect(() => {
     if (REDIRECTS[window.location.hash]) window.location.replace(REDIRECTS[window.location.hash]);
     const onChange = () => {
@@ -331,12 +355,14 @@ function LoggedInApp() {
     window.addEventListener("hashchange", onChange);
     return () => window.removeEventListener("hashchange", onChange);
   }, []);
-  const Page = PAGES.find((p) => p.path === route.path)!.page;
+  const Page = PAGES[index].page;
   return (
     <>
-      <Header path={route.path} />
-      <main>
-        <Page sub={route.sub} />
+      <Navigation path={route.path} />
+      <main className="app-main">
+        <PageTransition pageKey={route.path} direction={direction}>
+          <Page sub={route.sub} />
+        </PageTransition>
       </main>
     </>
   );

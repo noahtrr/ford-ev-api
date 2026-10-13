@@ -2,7 +2,9 @@
 // und Export (Jahresübersicht und einzelne Ladevorgänge als CSV, Excel und TXT).
 // Ford meldet keine fertigen Ladevorgänge, das Backend leitet sie aus Ladestand, Kabel und Ladestatus ab.
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { CATEGORY_LABELS, ExportButtons, MONTHS, PageTabs, PeriodTabs, VinSelect, hours, km, MapFrame, mapsUrl, num, periodLabel, type Category, type Period } from "./common";
+import { CATEGORY_LABELS, Collapse, ExpandChevron, ExportButtons, Select, MONTHS, PageTabs, PeriodTabs, VinSelect, hours, km, MapFrame, mapsUrl, num, periodLabel, type Category, type Period } from "./common";
+import { ExternalLink } from "lucide-react";
+import { buttonClass, ErrorMessage, ICON, Loading, Skeleton } from "./ui";
 
 interface Totals {
   sessions: number;
@@ -112,7 +114,8 @@ function LocationSnapshot({ lat, lon, savedAt }: { lat: number; lon: number; sav
           {lat.toFixed(5)}, {lon.toFixed(5)}
           {savedAt && ` · gespeichert ${dateTime(savedAt)}`}
         </span>
-        <a className="button small" href={url} target="_blank" rel="noopener noreferrer">
+        <a className={buttonClass("secondary", { small: true })} href={url} target="_blank" rel="noopener noreferrer">
+          <ExternalLink {...ICON} size={16} />
           In Google Maps öffnen
         </a>
       </div>
@@ -209,10 +212,10 @@ function DayDetails({ vin, date, onChanged }: { vin: string | null; date: string
     }
   };
 
-  if (sessions === null) return <p className="hint">Lade…</p>;
+  if (sessions === null) return <Loading />;
   return (
     <div className="day-details">
-      {error && <p className="message error">{error}</p>}
+      {error && <ErrorMessage text={error} />}
       {sessions.map((s) => (
         <SessionCard key={s.id} s={s} onMark={(c) => void mark([s.id], c)} />
       ))}
@@ -260,7 +263,7 @@ function ChargingHistoryTab() {
       <VinSelect vins={data?.vins ?? []} vin={data?.vin ?? null} onChange={setVin} />
       <PeriodTabs period={period} onChange={setPeriod} />
       {data === null ? (
-        <p>Lade…</p>
+        <Skeleton ready={false} lines={6} />
       ) : rows.length === 0 ? (
         <p>Noch keine Ladevorgänge erkannt.</p>
       ) : (
@@ -284,9 +287,7 @@ function ChargingHistoryTab() {
                       <td>
                         {expandable ? (
                           <button className="expand" aria-expanded={isOpen} onClick={(e) => (e.stopPropagation(), toggle(r.period))}>
-                            <span className="arrow" aria-hidden="true">
-                              ▸
-                            </span>
+                            <ExpandChevron open={isOpen} />
                             {periodLabel(r.period, period)}
                           </button>
                         ) : (
@@ -306,10 +307,12 @@ function ChargingHistoryTab() {
                       </td>
                       <td className="num">{hours(r.durationMin)}</td>
                     </tr>
-                    {isOpen && (
+                    {expandable && (
                       <tr className="details-row">
                         <td colSpan={5}>
-                          <DayDetails vin={data.vin} date={r.period} onChanged={load} />
+                          <Collapse open={isOpen}>
+                            <DayDetails vin={data.vin} date={r.period} onChanged={load} />
+                          </Collapse>
                         </td>
                       </tr>
                     )}
@@ -351,7 +354,7 @@ function ChargingExportTab() {
     void fetch(`/api/charging/year?${query}`).then(async (r) => setData(r.ok ? await r.json() : "empty"));
   }, [year, vin]);
 
-  if (data === null) return <p>Lade…</p>;
+  if (data === null) return <Skeleton ready={false} lines={8} />;
   if (data === "empty") return <p>Noch keine Messwerte gespeichert.</p>;
 
   const exportUrl = (type: string) => (format: string) =>
@@ -367,19 +370,12 @@ function ChargingExportTab() {
         mit Uhrzeit, Ladestand, Reichweite, Ladeart, Kilometerstand, Ort und Markierung.
       </p>
       <div className="toolbar">
-        <label className="field">
-          Jahr{" "}
-          <select value={year} onChange={(e) => setYear(Number(e.target.value))}>
-            {data.years.map((y) => (
-              <option key={y}>{y}</option>
-            ))}
-          </select>
-        </label>
+        <Select label="Jahr" value={String(year)} options={data.years.map(String)} onChange={(v) => setYear(Number(v))} />
         <VinSelect vins={data.vins} vin={data.vin} onChange={setVin} />
       </div>
       <div className="toolbar">
-        <ExportButtons label="Monatsübersicht:" url={exportUrl("months")} />
-        <ExportButtons label="Alle Ladevorgänge:" url={exportUrl("sessions")} />
+        <ExportButtons label="Monatsübersicht" url={exportUrl("months")} />
+        <ExportButtons label="Alle Ladevorgänge" url={exportUrl("sessions")} />
       </div>
       <div className="table-wrap">
         <table className="km-table">

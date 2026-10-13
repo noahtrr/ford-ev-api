@@ -3,7 +3,7 @@
 // Gespeichert wird nur die Hülle der App (HTML, JavaScript, CSS, Bilder), nie Daten vom Auto.
 // Alles unter /api, der Ford-Login und Swagger gehen immer direkt an den Server,
 // damit Login und Sitzungs-Cookie genauso funktionieren wie im Browser.
-const CACHE = "mein-ford-v1";
+const CACHE = "mein-ford-v2";
 
 self.addEventListener("install", () => self.skipWaiting());
 
