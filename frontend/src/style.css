@@ -534,61 +534,108 @@ button.button {
   display: block;
   width: 100%;
 }
-/* Anmeldeseite: Karte in der Mitte des Bildschirms */
+/* Anmeldeseite: links Titel mit fahrendem Explorer, rechts das Formular, auf bewegtem dunkelgrauem Hintergrund */
 .login-screen {
   min-height: 100dvh;
   display: grid;
   place-items: center;
   padding: 1.5rem 1rem;
   box-sizing: border-box;
-  background:
-    radial-gradient(60rem 30rem at 50% -10%, #2563eb33, transparent 70%),
-    var(--bg);
+  background: linear-gradient(120deg, #0d0f13, #1f232b, #121419, #262a33, #0d0f13);
+  background-size: 400% 400%;
+  animation: login-bg 24s ease-in-out infinite;
+}
+@keyframes login-bg {
+  50% {
+    background-position: 100% 50%;
+  }
 }
 .login {
   width: 100%;
-  max-width: 23rem;
+  max-width: 56rem;
   margin: 0;
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  gap: 1.5rem;
+}
+.login > * {
+  min-width: 0;
+}
+.login-hero,
+.login-panel {
   padding: 2rem 1.75rem;
   border: 1px solid var(--border);
   border-radius: 1.1rem;
-  background: var(--surface);
+  background: #131a27d9;
   box-shadow: 0 20px 50px #0007;
-  box-sizing: border-box;
 }
-.login-brand {
-  text-align: center;
-  margin-bottom: 1.5rem;
+.login-hero {
+  display: flex;
+  flex-direction: column;
+  min-height: 24rem;
 }
-.login-brand img {
-  width: 3.5rem;
-  height: 3.5rem;
-  border-radius: 0.9rem;
-}
-.login-brand h1 {
-  margin: 0.75rem 0 0.25rem;
-  font-size: 1.5rem;
-}
-.login-brand p {
+.login-hero h1 {
   margin: 0;
+  font-size: 1.75rem;
+}
+.road-scene {
+  margin: auto 0;
+  overflow: hidden;
+}
+.road-scene .car-drawing {
+  display: block;
+  width: 100%;
+  animation: car-bob 0.6s ease-in-out infinite alternate;
+}
+/* Rad dreht sich um seinen Mittelpunkt: das ist (0,0) im verschobenen <g> */
+.road-scene .wheel {
+  transform-box: view-box;
+  transform-origin: 0 0;
+  animation: wheel-spin 0.5s linear infinite;
+}
+/* Straße mit Mittelstreifen, der nach links wegläuft: so sieht es aus, als fahre der Explorer nach rechts */
+.road {
+  height: 1.6rem;
+  margin-top: -0.4rem;
+  background: linear-gradient(90deg, var(--muted) 50%, transparent 50%) 0 50% / 2.5rem 3px repeat-x, #20252e;
+  border-top: 2px solid var(--border-strong);
+  animation: road-move 0.5s linear infinite;
+}
+@keyframes car-bob {
+  to {
+    transform: translateY(-2px);
+  }
+}
+@keyframes wheel-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes road-move {
+  to {
+    background-position: -2.5rem 50%, 0 0;
+  }
+}
+.login-intro {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.1rem;
+  border-radius: 0.75rem;
+  background: var(--surface-2);
   color: var(--muted);
+  line-height: 1.5;
 }
 .login .form {
   margin-bottom: 0;
 }
-.divider {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin: 1.25rem 0;
-  font-size: 0.85rem;
-  opacity: 0.7;
-}
-.divider::before,
-.divider::after {
-  content: "";
-  flex: 1;
-  border-top: 1px solid var(--border-strong);
+@media (max-width: 720px) {
+  .login {
+    grid-template-columns: 1fr;
+    max-width: 26rem;
+  }
+  .login-hero {
+    min-height: 0;
+    gap: 1.5rem;
+  }
 }
 .form {
   display: flex;
